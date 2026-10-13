@@ -1,0 +1,65 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const helmet_1 = __importDefault(require("helmet"));
+const morgan_1 = __importDefault(require("morgan"));
+const config_1 = require("./config");
+const errorHandler_1 = require("./middleware/errorHandler");
+const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
+const client_routes_1 = __importDefault(require("./routes/client.routes"));
+const admin_routes_1 = __importDefault(require("./routes/admin.routes"));
+const product_routes_1 = __importDefault(require("./routes/product.routes"));
+const pointRule_routes_1 = __importDefault(require("./routes/pointRule.routes"));
+const prize_routes_1 = __importDefault(require("./routes/prize.routes"));
+const dashboard_routes_1 = __importDefault(require("./routes/dashboard.routes"));
+const automation_routes_1 = __importDefault(require("./routes/automation.routes"));
+const promotion_routes_1 = __importDefault(require("./routes/promotion.routes"));
+const coupon_routes_1 = __importDefault(require("./routes/coupon.routes"));
+const purchase_routes_1 = __importDefault(require("./routes/purchase.routes"));
+const clientApp_routes_1 = __importDefault(require("./routes/clientApp.routes"));
+const branch_routes_1 = __importDefault(require("./routes/branch.routes"));
+const brand_routes_1 = __importDefault(require("./routes/brand.routes"));
+const category_routes_1 = __importDefault(require("./routes/category.routes"));
+const challenge_routes_1 = __importDefault(require("./routes/challenge.routes"));
+const benefit_routes_1 = __importDefault(require("./routes/benefit.routes"));
+const systemConfig_routes_1 = __importDefault(require("./routes/systemConfig.routes"));
+const campaign_routes_1 = __importDefault(require("./routes/campaign.routes"));
+const app = (0, express_1.default)();
+app.use((0, helmet_1.default)());
+app.use((0, cors_1.default)(config_1.config.cors));
+app.use(express_1.default.json());
+app.use((0, morgan_1.default)(config_1.config.nodeEnv === 'production' ? 'combined' : 'dev'));
+// Rate limiting deshabilitado para permitir conexiones ilimitadas
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+app.use('/api/auth', auth_routes_1.default);
+app.use('/api/clients', client_routes_1.default);
+app.use('/api/admin', admin_routes_1.default);
+app.use('/api/products', product_routes_1.default);
+app.use('/api/point-rules', pointRule_routes_1.default);
+app.use('/api/prizes', prize_routes_1.default);
+app.use('/api/dashboard', dashboard_routes_1.default);
+app.use('/api/automation', automation_routes_1.default);
+app.use('/api/promotions', promotion_routes_1.default);
+app.use('/api/coupons', coupon_routes_1.default);
+app.use('/api/purchases', purchase_routes_1.default);
+app.use('/api/client', clientApp_routes_1.default);
+app.use('/api/branches', branch_routes_1.default);
+app.use('/api/brands', brand_routes_1.default);
+app.use('/api/categories', category_routes_1.default);
+app.use('/api/challenges', challenge_routes_1.default);
+app.use('/api/benefits', benefit_routes_1.default);
+app.use('/api/system-config', systemConfig_routes_1.default);
+app.use('/api/campaigns', campaign_routes_1.default);
+app.use(errorHandler_1.notFoundHandler);
+app.use(errorHandler_1.errorHandler);
+app.listen(config_1.config.port, () => {
+    console.log(`🚀 Server running on port ${config_1.config.port} (${config_1.config.nodeEnv})`);
+});
+exports.default = app;
+//# sourceMappingURL=index.js.map

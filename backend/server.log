@@ -1,0 +1,79 @@
+
+> club-pintureria-backend@1.0.0 dev
+> tsx watch src/index.ts
+
+🚀 Server running on port 3000 (development)
+08:18:21 [tsx] change in ./src\services\systemConfig.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+08:33:34 [tsx] change in ./src\services\systemConfig.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+08:48:41 [tsx] change in ./src\services\systemConfig.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:23:47 [tsx] change in ./src\services\whatsapp.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:25:45 [tsx] change in ./src\services\pointsExpiration.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:28:03 [tsx] change in ./src\controllers\systemConfig.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:30:06 [tsx] change in ./src\controllers\systemConfig.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:32:56 [tsx] change in ./src\controllers\systemConfig.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:35:22 [tsx] change in ./src\controllers\systemConfig.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:50:37 [tsx] change in ./src\index.ts Restarting...
+🚀 Server running on port 3000 (development)
+09:54:11 [tsx] change in ./src\index.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:02:48 [tsx] change in ./src\controllers\client.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:08:00 [tsx] change in ./src\controllers\client.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:11:21 [tsx] change in ./src\controllers\client.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:15:05 [tsx] change in ./src\controllers\client.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:18:38 [tsx] change in ./src\routes\client.routes.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:21:55 [tsx] change in ./src\routes\auth.routes.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:30:38 [tsx] change in ./src\routes\admin.routes.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:39:57 [tsx] change in ./src\routes\admin.routes.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:44:43 [tsx] change in ./src\services\email.service.ts Restarting...
+🚀 Server running on port 3000 (development)
+10:44:44 [tsx] change in ./src\routes\automation.routes.ts Restarting...
+10:44:45 [tsx] change in ./src\config\index.ts Restarting...
+🚀 Server running on port 3000 (development)
+11:07:53 [tsx] change in ./src\controllers\systemConfig.controller.ts Restarting...
+🚀 Server running on port 3000 (development)
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."passwordHash", "public"."User"."role"::text, "public"."User"."firstName", "public"."User"."lastName", "public"."User"."phone", "public"."User"."dni", "public"."User"."birthDate", "public"."User"."isActive", "public"."User"."createdAt", "public"."User"."updatedAt", "public"."User"."branchId" FROM "public"."User" WHERE ("public"."User"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+[0mPOST /api/auth/login [32m200[0m 2311.779 ms - 642[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."role"::text, "public"."User"."dni", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."isActive" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."SystemConfig"."key", "public"."SystemConfig"."value", "public"."SystemConfig"."description", "public"."SystemConfig"."updatedAt" FROM "public"."SystemConfig" WHERE ("public"."SystemConfig"."key" = $1 AND 1=1) LIMIT $2 OFFSET $3
+[0mGET /api/system-config/points_per_currency [32m200[0m 95.385 ms - 250[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."role"::text, "public"."User"."dni", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."isActive" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."SystemConfig"."key", "public"."SystemConfig"."value", "public"."SystemConfig"."description", "public"."SystemConfig"."updatedAt" FROM "public"."SystemConfig" WHERE ("public"."SystemConfig"."key" = $1 AND 1=1) LIMIT $2 OFFSET $3
+[0mGET /api/campaigns/templates [32m200[0m 39.185 ms - 832[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."role"::text, "public"."User"."dni", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."isActive" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."User"."id", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."dni", "public"."User"."phone" FROM "public"."User" WHERE ("public"."User"."role" = CAST($1::text AS "public"."UserRole") AND "public"."User"."isActive" = $2) ORDER BY "public"."User"."firstName" ASC, "public"."User"."lastName" ASC OFFSET $3
+prisma:query SELECT "public"."ClientProfile"."id", "public"."ClientProfile"."currentPoints", "public"."ClientProfile"."userId" FROM "public"."ClientProfile" WHERE "public"."ClientProfile"."userId" IN ($1,$2) OFFSET $3
+[0mGET /api/campaigns/recipients [32m200[0m 202.808 ms - 331[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."role"::text, "public"."User"."dni", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."isActive" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+[0mPOST /api/admin/users [33m400[0m 29.703 ms - 127[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."passwordHash", "public"."User"."role"::text, "public"."User"."firstName", "public"."User"."lastName", "public"."User"."phone", "public"."User"."dni", "public"."User"."birthDate", "public"."User"."isActive", "public"."User"."createdAt", "public"."User"."updatedAt", "public"."User"."branchId" FROM "public"."User" WHERE ("public"."User"."email" = $1 AND 1=1) LIMIT $2 OFFSET $3
+Error: AppError: Credenciales inválidas
+    at login (C:\Users\santiherrera\Documents\club-pintureria\backend\src\controllers\auth.controller.ts:99:13) {
+  statusCode: 401,
+  details: undefined
+}
+[0mPOST /api/auth/login [33m401[0m 87.232 ms - 35[0m
+[0mGET /api/clients [33m401[0m 1.846 ms - 34[0m
+[0mGET /api/dashboard/stats [33m401[0m 2.156 ms - 34[0m
+[0mPOST /api/clients [33m401[0m 0.667 ms - 34[0m
+prisma:query SELECT "public"."User"."id", "public"."User"."email", "public"."User"."role"::text, "public"."User"."dni", "public"."User"."firstName", "public"."User"."lastName", "public"."User"."isActive" FROM "public"."User" WHERE ("public"."User"."id" = $1 AND 1=1) LIMIT $2 OFFSET $3
+prisma:query SELECT "public"."SystemConfig"."key", "public"."SystemConfig"."value", "public"."SystemConfig"."description", "public"."SystemConfig"."updatedAt" FROM "public"."SystemConfig" WHERE ("public"."SystemConfig"."key" = $1 AND 1=1) LIMIT $2 OFFSET $3
+📱 [WhatsApp MOCK] Enviando a: 5491155550000
+📱 [WhatsApp MOCK] Mensaje: Hola Cliente, tenes 0 puntos en Club Robles
+[0mPOST /api/campaigns/send [32m200[0m 23.457 ms - 76[0m
