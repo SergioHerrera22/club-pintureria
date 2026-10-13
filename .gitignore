@@ -1,0 +1,25 @@
+# Dependencias
+node_modules/
+
+# Builds
+backend/dist/
+frontend/dist/
+
+# Entorno y secretos
+.env
+.env.*
+!.env.example
+
+# Logs y temporales
+*.log
+server.log
+backend/server.log
+
+# Backups
+*.zip
+*.bak
+
+# SO / editors
+.DS_Store
+Thumbs.db
+tsconfig.tsbuildinfo

@@ -2,6 +2,8 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import path from 'path';
+import fs from 'fs';
 import { config } from './config';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
@@ -33,8 +35,29 @@ app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
 
 // Rate limiting deshabilitado para permitir conexiones ilimitadas
 
+// Carpeta del frontend (SPA) para despliegue en un solo origen
+const frontendDistCandidates = [
+  process.env.FRONTEND_DIST_PATH,
+  path.resolve(__dirname, '../frontend-dist'),
+  path.resolve(__dirname, 'frontend-dist'),
+  path.resolve(__dirname, '../../frontend/dist'),
+].filter((p): p is string => !!p);
+
+const frontendDist = frontendDistCandidates.find(p => fs.existsSync(path.join(p, 'index.html')));
+
+if (!frontendDist) {
+  console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
+}
+
+const APP_VERSION = 'frontend-fix-2';
+
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({
+    status: 'ok',
+    version: APP_VERSION,
+    timestamp: new Date().toISOString(),
+    frontend: frontendDist ? 'served' : 'not-found',
+  });
 });
 
 app.use('/api/auth', authRoutes);
@@ -56,6 +79,16 @@ app.use('/api/challenges', challengeRoutes);
 app.use('/api/benefits', benefitRoutes);
 app.use('/api/system-config', systemConfigRoutes);
 app.use('/api/campaigns', campaignRoutes);
+
+// Servir el frontend (SPA) DESPUÉS de las rutas API y ANTES del 404
+if (frontendDist) {
+  app.use(express.static(frontendDist));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api') || req.path === '/health') return next();
+    res.sendFile(path.join(frontendDist, 'index.html'));
+  });
+  console.log(`🌐 Frontend servido desde: ${frontendDist}`);
+}
 
 app.use(notFoundHandler);
 app.use(errorHandler);

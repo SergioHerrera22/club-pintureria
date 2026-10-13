@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useEffect } from 'react';
 import { getHomeForRole } from './lib/utils';
@@ -116,7 +116,7 @@ function App() {
       </Route>
       
       {/* Client app routes - no Layout, full screen */}
-      <Route element={<ProtectedRoute allowedRoles={['CLIENTE']}><div className="min-h-screen bg-gray-50" /></ProtectedRoute>}>
+      <Route element={<ProtectedRoute allowedRoles={['CLIENTE']}><Outlet /></ProtectedRoute>}>
         <Route path="/app/home" element={<ClientHome />} />
         <Route path="/app/prizes" element={<ClientPrizes />} />
         <Route path="/app/points" element={<ClientPointsHistory />} />
