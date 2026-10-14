@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
+import net from 'net';
+import dns from 'dns';
 import { config } from './config';
 import { prisma } from './config/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
@@ -50,7 +52,19 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'db-diag-1';
+const APP_VERSION = 'db-diag-2';
+
+async function probeTcp(host: string, port: number, timeoutMs = 8000): Promise<string> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    const finish = (result: string) => { socket.destroy(); resolve(result); };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish('ok'));
+    socket.once('timeout', () => finish('timeout'));
+    socket.once('error', (e: Error) => finish(`error: ${e.message}`));
+    socket.connect(port, host);
+  });
+}
 
 app.get('/health', async (req, res) => {
   let db: string = 'ok';
@@ -59,12 +73,30 @@ app.get('/health', async (req, res) => {
   } catch (err) {
     db = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
   }
+
+  let dbHost = 'desconocido';
+  try {
+    dbHost = new URL(process.env.DATABASE_URL || '').hostname || dbHost;
+  } catch { /* URL invalida */ }
+
+  const network: Record<string, string> = {};
+  try {
+    const addrs = await dns.promises.lookup(dbHost, { all: true });
+    network.dns = addrs.map(a => `${a.address}(${a.family})`).join(', ');
+  } catch (e) {
+    network.dns = `fail: ${(e as Error).message}`;
+  }
+  network[`tcp_${dbHost}:5432`] = await probeTcp(dbHost, 5432);
+  network[`tcp_${dbHost}:6543`] = await probeTcp(dbHost, 6543);
+  network['tcp_control_registry.npmjs.org:443'] = await probeTcp('registry.npmjs.org', 443);
+
   res.json({
     status: 'ok',
     version: APP_VERSION,
     timestamp: new Date().toISOString(),
     frontend: frontendDist ? 'served' : 'not-found',
     db,
+    network,
   });
 });
 
