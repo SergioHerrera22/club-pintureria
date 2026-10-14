@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { api } from '../lib/api';
+import logoUrl from '../assets/robles-logo.png';
 import {
   AlertCircle,
   ArrowLeft,
@@ -225,6 +226,11 @@ export default function ClientPortal() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
+          <img
+            src={logoUrl}
+            alt="Robles Club"
+            className="w-20 h-20 rounded-2xl object-cover mx-auto mb-4 shadow-md"
+          />
           <h1 className="text-3xl font-bold text-primary-600">Club Robles</h1>
           <h2 className="mt-3 text-xl font-semibold text-gray-800">{titles[step].title}</h2>
           <p className="mt-1 text-gray-600">{titles[step].subtitle}</p>
@@ -480,15 +486,6 @@ export default function ClientPortal() {
               </button>
             </form>
           )}
-        </div>
-
-        <div className="mt-6 text-center text-sm text-gray-500">
-          <p>
-            ¿Sos personal del local?{' '}
-            <Link to="/login" className="font-medium text-primary-600 hover:text-primary-700">
-              Ingresá por acá
-            </Link>
-          </p>
         </div>
       </div>
     </div>

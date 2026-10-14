@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import ClientHeader from '../components/ClientHeader';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
-import { ArrowLeft, QrCode, Download, RefreshCw, Share2, User, Award, Shield, Info, Copy, Check } from 'lucide-react';
+import { QrCode, Download, RefreshCw, Share2, User, Award, Shield, Info, Copy, Check } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 
 interface QRData {
@@ -125,24 +126,7 @@ export default function ClientQR() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-md mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <button onClick={() => navigate('/app/home')} className="text-gray-500 hover:text-gray-700">
-              <ArrowLeft className="w-5 h-5" />
-            </button>
-            <div className="flex items-center gap-3 flex-1">
-              <div className="w-10 h-10 bg-purple-600 rounded-xl flex items-center justify-center">
-                <QrCode className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Mi QR</h1>
-                <p className="text-sm text-gray-500">Identificación en caja</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+            <ClientHeader title="Mi QR" subtitle="Identificación en caja" backTo="/app/home" maxWidth="md" />
 
       <main className="max-w-md mx-auto px-4 py-6 pb-20">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">

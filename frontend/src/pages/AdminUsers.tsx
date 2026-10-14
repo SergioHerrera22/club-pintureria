@@ -81,7 +81,7 @@ interface Transaction {
 }
 
 interface UserDetail extends UserData {
-  recentTransactions: Transaction[];
+  recentTransactions?: Transaction[];
 }
 
 const roleLabels: Record<string, string> = {
@@ -786,14 +786,14 @@ function AdminUsers() {
                   Últimos Movimientos (Ventas realizadas por este usuario)
                 </h3>
                 
-                {detailUser.recentTransactions.length === 0 ? (
+                {(detailUser.recentTransactions ?? []).length === 0 ? (
                   <div className="p-8 text-center text-gray-500">
                     <History className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                     <p>No hay ventas registradas realizadas por este usuario</p>
                   </div>
                 ) : (
                   <div className="divide-y divide-gray-200">
-                    {detailUser.recentTransactions.map((tx) => (
+                    {(detailUser.recentTransactions ?? []).map((tx) => (
                       <div key={tx.id} className="p-4 hover:bg-gray-50">
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-3">

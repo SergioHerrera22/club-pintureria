@@ -1,6 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
+import logoUrl from '../assets/robles-logo.png';
 // @ts-ignore
 import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
@@ -50,7 +51,10 @@ export default function Layout() {
         aria-label="Sidebar"
       >
         <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 lg:justify-center">
-          <h1 className="text-xl font-bold text-primary-600">Club Robles</h1>
+          <div className="flex items-center gap-2.5">
+            <img src={logoUrl} alt="Robles Club" className="w-9 h-9 rounded-lg object-cover" />
+            <h1 className="text-xl font-bold text-primary-600">Club Robles</h1>
+          </div>
           <button
             className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
             onClick={() => setSidebarOpen(false)}
@@ -128,7 +132,10 @@ export default function Layout() {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <h1 className="text-xl font-bold text-primary-600">Club Robles</h1>
+            <div className="flex items-center gap-2">
+              <img src={logoUrl} alt="Robles Club" className="w-8 h-8 rounded-lg object-cover" />
+              <h1 className="text-xl font-bold text-primary-600">Club Robles</h1>
+            </div>
             <div className="w-10" />
           </div>
         </header>

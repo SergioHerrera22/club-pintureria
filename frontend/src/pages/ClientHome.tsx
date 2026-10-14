@@ -8,6 +8,7 @@ import {
   Shield, Crown, Crown as CrownIcon, Heart
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
+import ClientHeader from '../components/ClientHeader';
 
 interface NextGoal {
   id: string;
@@ -230,25 +231,16 @@ export default function ClientHome() {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
-                <Award className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Club Robles</h1>
-                <p className="text-sm text-gray-500">Tu club de beneficios</p>
-              </div>
-            </div>
-            <div className="text-right">
-              <p className="text-sm text-gray-500">Hola, {client.firstName}</p>
-              <p className="text-xs text-gray-400">DNI: {client.dni}</p>
-            </div>
+      <ClientHeader
+        title="Club Robles"
+        subtitle="Tu club de beneficios"
+        right={
+          <div className="text-right">
+            <p className="text-sm text-gray-500">Hola, {client.firstName}</p>
+            <p className="text-xs text-gray-400">DNI: {client.dni}</p>
           </div>
-        </div>
-      </header>
+        }
+      />
 
       <main className="max-w-4xl mx-auto px-4 py-6 pb-20">
         {/* Points Header */}

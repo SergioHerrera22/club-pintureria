@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
+import ClientHeader from '../components/ClientHeader';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { cn, formatNumber, formatDateTime } from '../lib/utils';
-import { ArrowLeft, Award, Loader2, AlertTriangle, TrendingUp, TrendingDown, ShoppingBag, Settings2, Scissors, Clock, ChevronDown } from 'lucide-react';
+import { Award, Loader2, AlertTriangle, TrendingUp, TrendingDown, ShoppingBag, Settings2, Scissors, Clock, ChevronDown } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 
 interface Movement {
@@ -110,28 +111,10 @@ export default function ClientPointsHistory() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <button onClick={() => navigate('/app/home')} className="text-gray-500 hover:text-gray-700">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
-                <Award className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">Mis Puntos</h1>
-                <p className="text-sm text-gray-500">Historial de movimientos</p>
-              </div>
-            </div>
-            <div className="text-right">
+            <ClientHeader title="Mis Puntos" subtitle="Historial de movimientos" backTo="/app/home" maxWidth="4xl" right={<div className="text-right">
               <p className="text-xs text-gray-500">Saldo actual</p>
               <p className="text-2xl font-bold text-primary-600">{formatNumber(data?.currentPoints || 0)}</p>
-            </div>
-          </div>
-        </div>
-      </header>
+            </div>} />
 
       <main className="max-w-4xl mx-auto px-4 py-6 pb-16">
         {/* Resumen */}

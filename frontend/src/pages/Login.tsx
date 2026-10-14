@@ -5,6 +5,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
+import logoUrl from '../assets/robles-logo.png';
 import { cn, getHomeForRole } from '../lib/utils';
 import { Lock, Mail, AlertCircle, Eye, EyeOff, Loader2 } from 'lucide-react';
 
@@ -43,6 +44,11 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
+          <img
+            src={logoUrl}
+            alt="Robles Club"
+            className="w-20 h-20 rounded-2xl object-cover mx-auto mb-4 shadow-md"
+          />
           <h1 className="text-3xl font-bold text-primary-600">Club Robles</h1>
           <p className="mt-2 text-gray-600">Inicia sesión para continuar</p>
         </div>
