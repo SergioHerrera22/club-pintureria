@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import net from 'net';
+import tls from 'tls';
 import dns from 'dns';
 import { config } from './config';
 import { prisma } from './config/prisma';
@@ -52,7 +53,7 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'db-diag-2';
+const APP_VERSION = 'db-diag-3';
 
 async function probeTcp(host: string, port: number, timeoutMs = 8000): Promise<string> {
   return new Promise((resolve) => {
@@ -63,6 +64,55 @@ async function probeTcp(host: string, port: number, timeoutMs = 8000): Promise<s
     socket.once('timeout', () => finish('timeout'));
     socket.once('error', (e: Error) => finish(`error: ${e.message}`));
     socket.connect(port, host);
+  });
+}
+
+// Handshake real de Postgres: SSLRequest -> TLS -> StartupMessage -> 1ra respuesta del server
+async function probePostgres(host: string, port: number, timeoutMs = 10000): Promise<string> {
+  return new Promise((resolve) => {
+    const raw = new net.Socket();
+    let settled = false;
+    const finish = (result: string) => {
+      if (settled) return;
+      settled = true;
+      try { raw.destroy(); } catch { /* noop */ }
+      resolve(result);
+    };
+    raw.setTimeout(timeoutMs);
+    raw.once('timeout', () => finish('timeout'));
+    raw.once('error', (e: Error) => finish(`error: ${e.message}`));
+    raw.once('connect', () => {
+      const sslReq = Buffer.alloc(8);
+      sslReq.writeInt32BE(8, 0);
+      sslReq.writeInt32BE(80877103, 4); // SSLRequest code
+      raw.write(sslReq);
+    });
+    raw.once('data', (d: Buffer) => {
+      raw.removeAllListeners('data');
+      if (d.toString('latin1', 0, 1) !== 'S') return finish('server-no-ssl');
+      const tlsSock = tls.connect({ socket: raw, servername: host, rejectUnauthorized: false });
+      tlsSock.once('secureConnect', () => {
+        // StartupMessage protocolo 3.0, user=postgres database=postgres
+        const params = Buffer.from('user\0postgres\0database\0postgres\0', 'latin1');
+        const len = 8 + params.length;
+        const start = Buffer.alloc(len);
+        start.writeInt32BE(len, 0);
+        start.writeInt32BE(196608, 4);
+        params.copy(start, 8);
+        tlsSock.write(start);
+      });
+      tlsSock.once('error', (e: Error) => finish(`tls-error: ${e.message}`));
+      tlsSock.once('data', (d2: Buffer) => {
+        const tag = d2.toString('latin1', 0, 1);
+        if (tag === 'R') return finish('pg-auth-request (backend de la DB esta vivo)');
+        if (tag === 'E') {
+          const segs = d2.slice(5).toString('latin1').split('\0').filter(s => s.length > 0);
+          return finish(`pg-error [${segs.join(' | ')}]`);
+        }
+        return finish(`pg-unexpected: ${d2.toString('latin1', 0, 60)}`);
+      });
+    });
+    raw.connect(port, host);
   });
 }
 
@@ -89,6 +139,9 @@ app.get('/health', async (req, res) => {
   network[`tcp_${dbHost}:5432`] = await probeTcp(dbHost, 5432);
   network[`tcp_${dbHost}:6543`] = await probeTcp(dbHost, 6543);
   network['tcp_control_registry.npmjs.org:443'] = await probeTcp('registry.npmjs.org', 443);
+  network['postgres_handshake'] = await probePostgres(dbHost, 5432);
+  const proxyVars = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'];
+  network.proxy = proxyVars.filter(v => process.env[v]).join(',') || 'none';
 
   res.json({
     status: 'ok',
