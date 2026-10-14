@@ -37,49 +37,54 @@ router.get('/home', async (req, res, next) => {
 
     const profile = client.clientProfile;
 
-    // Promociones activas para el cliente
-    const promotions = await PromotionService.getActivePromotionsForClient(
-      [],
-      0,
-      [],
-      [],
-      []
-    );
+    // Todas las consultas son lecturas independientes: se ejecutan en
+    // paralelo para evitar sumar la latencia de red de la base de datos
+    // en cada paso (con DB remota esto era la principal causa de lentitud).
+    const [promotions, challenges, coupons, recentPurchases, expiringCoupons, benefits] = await Promise.all([
+      // Promociones activas para el cliente
+      PromotionService.getActivePromotionsForClient(
+        [],
+        0,
+        [],
+        [],
+        []
+      ),
 
-    // Desafíos activos
-    const challenges = await ChallengeService.getClientChallenges(user.id);
+      // Desafíos activos
+      ChallengeService.getClientChallenges(user.id),
 
-    // Cupones disponibles
-    const coupons = await CouponService.getCoupons({
-      clientId: user.id,
-      isActive: true,
-      page: 1,
-      limit: 5,
-    });
-
-    // Últimas compras
-    const recentPurchases = await PurchaseService.getPurchases({
-      clientId: user.id,
-      page: 1,
-      limit: 5,
-    });
-
-    // Cupones por vencer (próximos 7 días)
-    const expiringCoupons = await prisma.coupon.findMany({
-      where: {
+      // Cupones disponibles
+      CouponService.getCoupons({
         clientId: user.id,
         isActive: true,
-        endDate: {
-          gte: new Date(),
-          lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-        },
-      },
-      take: 3,
-      orderBy: { endDate: 'asc' },
-    });
+        page: 1,
+        limit: 5,
+      }),
 
-    // Beneficios disponibles
-    const benefits = await BenefitService.getActiveBenefits();
+      // Últimas compras
+      PurchaseService.getPurchases({
+        clientId: user.id,
+        page: 1,
+        limit: 5,
+      }),
+
+      // Cupones por vencer (próximos 7 días)
+      prisma.coupon.findMany({
+        where: {
+          clientId: user.id,
+          isActive: true,
+          endDate: {
+            gte: new Date(),
+            lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+        },
+        take: 3,
+        orderBy: { endDate: 'asc' },
+      }),
+
+      // Beneficios disponibles
+      BenefitService.getActiveBenefits(),
+    ]);
 
     res.json({
       client: {

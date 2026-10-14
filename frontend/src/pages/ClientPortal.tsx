@@ -166,7 +166,7 @@ export default function ClientPortal() {
             id="portal-password"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
-            className="input pl-10 pr-10"
+            className="input pl-10 pr-10 py-2.5 bg-white"
             placeholder="Mínimo 6 caracteres"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -191,7 +191,7 @@ export default function ClientPortal() {
             id="portal-confirm"
             type={showPassword ? 'text' : 'password'}
             autoComplete="new-password"
-            className="input pl-10"
+            className="input pl-10 py-2.5 bg-white"
             placeholder="••••••••"
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
@@ -223,19 +223,27 @@ export default function ClientPortal() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-amber-100 px-4 py-8 relative overflow-hidden">
+      {/* Decoración de fondo */}
+      <div className="pointer-events-none absolute -top-24 -right-24 w-96 h-96 bg-primary-200/50 rounded-full blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 -left-24 w-96 h-96 bg-amber-200/40 rounded-full blur-3xl" />
+      <div className="pointer-events-none absolute top-1/3 left-1/2 w-72 h-72 bg-primary-100/40 rounded-full blur-3xl" />
+
+      <div className="w-full max-w-md relative animate-fade-in-up">
         <div className="text-center mb-8">
           <img
             src={logoUrl}
             alt="Robles Club"
-            className="w-24 h-24 rounded-2xl object-cover mx-auto mb-5 shadow-md"
+            className="w-36 h-36 sm:w-40 sm:h-40 rounded-3xl object-cover mx-auto mb-5 shadow-2xl shadow-primary-900/20 ring-4 ring-white"
           />
-          <h2 className="text-xl font-semibold text-gray-800">{titles[step].title}</h2>
-          <p className="mt-1 text-gray-600">{titles[step].subtitle}</p>
+          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
+            Robles <span className="text-primary-600">Club</span>
+          </h1>
+          <h2 className="mt-2 text-lg font-semibold text-gray-800">{titles[step].title}</h2>
+          <p className="mt-1 text-gray-500">{titles[step].subtitle}</p>
         </div>
 
-        <div className="card p-6">
+        <div className="card p-6 sm:p-8 shadow-xl shadow-gray-900/5 border-white/80">
           {error && (
             <div className="mb-4 flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
               <AlertCircle className="w-5 h-5 flex-shrink-0" />
@@ -247,7 +255,7 @@ export default function ClientPortal() {
             <button
               type="button"
               onClick={backToDni}
-              className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+              className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-primary-600 transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Cambiar DNI
@@ -265,7 +273,7 @@ export default function ClientPortal() {
                     id="portal-dni"
                     type="text"
                     inputMode="numeric"
-                    className="input pl-10"
+                    className="input pl-10 py-2.5 bg-white"
                     placeholder="Ej: 30123456"
                     value={dni}
                     onChange={(e) => setDni(e.target.value)}
@@ -279,7 +287,7 @@ export default function ClientPortal() {
                 </p>
               </div>
 
-              <button type="submit" disabled={isLoading} className="w-full btn-primary py-3">
+              <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -303,7 +311,7 @@ export default function ClientPortal() {
                     <input
                       id="portal-phone"
                       type="tel"
-                      className="input pl-10"
+                      className="input pl-10 py-2.5 bg-white"
                       placeholder="Ej: 11 2345 6789"
                       value={verifyValue}
                       onChange={(e) => setVerifyValue(e.target.value)}
@@ -325,7 +333,7 @@ export default function ClientPortal() {
                     <input
                       id="portal-email-verify"
                       type="email"
-                      className="input pl-10"
+                      className="input pl-10 py-2.5 bg-white"
                       placeholder="tu@email.com"
                       value={verifyValue}
                       onChange={(e) => setVerifyValue(e.target.value)}
@@ -341,7 +349,7 @@ export default function ClientPortal() {
 
               {passwordFields('Crear contraseña')}
 
-              <button type="submit" disabled={isLoading} className="w-full btn-primary py-3">
+              <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -365,7 +373,7 @@ export default function ClientPortal() {
                     id="portal-login-password"
                     type={showPassword ? 'text' : 'password'}
                     autoComplete="current-password"
-                    className="input pl-10 pr-10"
+                    className="input pl-10 pr-10 py-2.5 bg-white"
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -384,7 +392,7 @@ export default function ClientPortal() {
                 </div>
               </div>
 
-              <button type="submit" disabled={isLoading} className="w-full btn-primary py-3">
+              <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -408,7 +416,7 @@ export default function ClientPortal() {
                     <input
                       id="portal-reg-first"
                       type="text"
-                      className="input pl-10"
+                      className="input pl-10 py-2.5 bg-white"
                       placeholder="Juan"
                       value={regFirstName}
                       onChange={(e) => setRegFirstName(e.target.value)}
@@ -422,7 +430,7 @@ export default function ClientPortal() {
                   <input
                     id="portal-reg-last"
                     type="text"
-                    className="input"
+                    className="input py-2.5 bg-white"
                     placeholder="Pérez"
                     value={regLastName}
                     onChange={(e) => setRegLastName(e.target.value)}
@@ -439,7 +447,7 @@ export default function ClientPortal() {
                   <input
                     id="portal-reg-phone"
                     type="tel"
-                    className="input pl-10"
+                    className="input pl-10 py-2.5 bg-white"
                     placeholder="Ej: 11 2345 6789"
                     value={regPhone}
                     onChange={(e) => setRegPhone(e.target.value)}
@@ -459,7 +467,7 @@ export default function ClientPortal() {
                   <input
                     id="portal-reg-email"
                     type="email"
-                    className="input pl-10"
+                    className="input pl-10 py-2.5 bg-white"
                     placeholder="tu@email.com"
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
@@ -470,7 +478,7 @@ export default function ClientPortal() {
 
               {passwordFields('Contraseña')}
 
-              <button type="submit" disabled={isLoading} className="w-full btn-primary py-3">
+              <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
                     <Loader2 className="w-5 h-5 animate-spin" />
@@ -486,6 +494,10 @@ export default function ClientPortal() {
             </form>
           )}
         </div>
+
+        <p className="mt-6 text-center text-xs text-gray-400">
+          Programa de beneficios de Pinturería Robles
+        </p>
       </div>
     </div>
   );
