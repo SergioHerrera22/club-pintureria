@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
 import { config } from './config';
+import { prisma } from './config/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
 import clientRoutes from './routes/client.routes';
@@ -49,14 +50,21 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'frontend-fix-2';
+const APP_VERSION = 'db-diag-1';
 
-app.get('/health', (req, res) => {
+app.get('/health', async (req, res) => {
+  let db: string = 'ok';
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (err) {
+    db = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  }
   res.json({
     status: 'ok',
     version: APP_VERSION,
     timestamp: new Date().toISOString(),
     frontend: frontendDist ? 'served' : 'not-found',
+    db,
   });
 });
 
