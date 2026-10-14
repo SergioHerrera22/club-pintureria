@@ -23,18 +23,146 @@ const userBranchFilter = (req: AuthRequest): { isGlobal: boolean; branchId: stri
 const branchWhere = (scope: { isGlobal: boolean; branchId: string | null }): Prisma.UserWhereInput =>
   scope.isGlobal ? {} : { branchId: scope.branchId };
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+type PointsExpiryStatus = 'ok' | 'expiring' | 'expired';
+
+interface PointsExpiryInfo {
+  status: PointsExpiryStatus;
+  /** Días que faltan para el vencimiento (null si el vencimiento está deshabilitado o ya pasó) */
+  daysLeft: number | null;
+  lastActivityAt: Date | null;
+}
+
+type UserWithProfile = Prisma.UserGetPayload<{ include: { clientProfile: true } }>;
+
+/**
+ * Estado de vencimiento de puntos de un cliente, con la misma lógica que
+ * PointsExpirationService: la última actividad (compra/canje) + points_expiry_days
+ * define la fecha de vencimiento.
+ * - expired: ya perdió puntos por vencimiento (transacción VENCIMIENTO y saldo 0),
+ *   o tiene saldo y la fecha de vencimiento ya pasó sin que corra el proceso.
+ * - expiring: tiene saldo y le quedan `windowDays` días o menos.
+ * - ok: resto.
+ */
+const computePointsExpiry = (
+  user: UserWithProfile,
+  lastActivityAt: Date | null,
+  hadExpiryLoss: boolean,
+  expiryConfigDays: number,
+  windowDays: number,
+  now: number,
+): PointsExpiryInfo => {
+  const currentPoints = user.clientProfile?.currentPoints ?? 0;
+  let status: PointsExpiryStatus = 'ok';
+  let daysLeft: number | null = null;
+
+  if (expiryConfigDays > 0 && lastActivityAt) {
+    const daysSinceActivity = Math.floor((now - new Date(lastActivityAt).getTime()) / DAY_MS);
+    daysLeft = expiryConfigDays - daysSinceActivity;
+    if (currentPoints > 0) {
+      if (daysLeft <= 0) {
+        status = 'expired';
+        daysLeft = null;
+      } else if (daysLeft <= windowDays) {
+        status = 'expiring';
+      }
+    }
+  }
+
+  if (status === 'ok' && hadExpiryLoss && currentPoints === 0) {
+    status = 'expired';
+    daysLeft = null;
+  }
+
+  return { status, daysLeft, lastActivityAt };
+};
+
+/** Adjunta el estado de vencimiento a cada cliente y lo mapea al formato de respuesta. */
+const withPointsExpiry = async (
+  users: UserWithProfile[],
+  expiryConfigDays: number,
+  windowDays: number,
+  now: number,
+) => {
+  const ids = users.map((u) => u.id);
+
+  const emptyGroups: Array<{ userId: string; _max: { createdAt: Date | null } }> = [];
+  const emptyLossRows: Array<{ userId: string }> = [];
+
+  const [lastActivityGroups, expiryLossRows] = await Promise.all([
+    ids.length > 0
+      ? prisma.transaction.groupBy({
+          by: ['userId'],
+          where: { userId: { in: ids }, type: { in: [TransactionType.COMPRA, TransactionType.CANJE] } },
+          _max: { createdAt: true },
+        })
+      : Promise.resolve(emptyGroups),
+    ids.length > 0
+      ? prisma.transaction.findMany({
+          where: { userId: { in: ids }, type: TransactionType.VENCIMIENTO },
+          select: { userId: true },
+          distinct: ['userId'],
+        })
+      : Promise.resolve(emptyLossRows),
+  ]);
+
+  const lastActivityMap = new Map(lastActivityGroups.map((g) => [g.userId, g._max.createdAt]));
+  const expiryLossSet = new Set(expiryLossRows.map((r) => r.userId));
+
+  return users.map((u) => {
+    const lastActivityAt = lastActivityMap.get(u.id) || u.clientProfile?.lastPurchaseAt || u.createdAt;
+    const pointsExpiry = computePointsExpiry(
+      u,
+      lastActivityAt,
+      expiryLossSet.has(u.id),
+      expiryConfigDays,
+      windowDays,
+      now,
+    );
+
+    return {
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      dni: u.dni,
+      email: u.email,
+      phone: u.phone,
+      birthDate: u.birthDate,
+      isActive: u.isActive,
+      createdAt: u.createdAt,
+      clientProfile: u.clientProfile ? {
+        currentPoints: u.clientProfile.currentPoints,
+        totalPointsEarned: u.clientProfile.totalPointsEarned,
+        totalPointsRedeemed: u.clientProfile.totalPointsRedeemed,
+        lastPurchaseAt: u.clientProfile.lastPurchaseAt,
+      } : null,
+      pointsExpiry,
+    };
+  });
+};
+
 export const listClients = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { page = 1, limit = 20, search, isActive, sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
-    
+    const {
+      page = 1,
+      limit = 20,
+      search,
+      isActive,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      expiryStatus,
+      expiryDays,
+    } = req.query;
+
     const scope = userBranchFilter(req);
     const where: Prisma.UserWhereInput = { role: UserRole.CLIENTE, ...branchWhere(scope) };
-    
+
     // El admin puede filtrar por sucursal específica
     if (scope.isGlobal && req.query.branchId) {
       where.branchId = req.query.branchId as string;
     }
-    
+
     if (search) {
       const searchStr = search as string;
       where.OR = [
@@ -44,45 +172,72 @@ export const listClients = async (req: AuthRequest, res: Response, next: NextFun
         { email: { contains: searchStr, mode: 'insensitive' } },
       ];
     }
-    
+
     if (isActive !== undefined) {
       where.isActive = isActive === 'true';
     }
-    
+
     const validSortFields = ['createdAt', 'firstName', 'lastName', 'dni', 'email'] as const;
     type SortField = typeof validSortFields[number];
     const sortField = validSortFields.includes(sortBy as SortField) ? sortBy as SortField : 'createdAt';
-    const orderBy: Prisma.UserOrderByWithRelationInput = { [sortField]: sortOrder === 'asc' ? 'asc' : 'desc' };
-    
-    const [clients, total] = await Promise.all([
+    const dir = sortOrder === 'asc' ? 1 : -1;
+
+    const statusFilter = ['expiring', 'expired', 'ok'].includes(String(expiryStatus))
+      ? String(expiryStatus) as PointsExpiryStatus
+      : null;
+    const windowDays = Math.min(Math.max(Number(expiryDays) || 30, 1), 365);
+
+    const expiryConfigDays = await SystemConfigService.getPointsExpiryDays();
+    const now = Date.now();
+
+    if (statusFilter) {
+      // El estado de vencimiento no es una columna: se calcula en memoria sobre
+      // todos los clientes que cumplen los demás filtros y luego se pagina.
+      const users = await prisma.user.findMany({
+        where,
+        include: { clientProfile: true },
+      });
+      const allClients = await withPointsExpiry(users, expiryConfigDays, windowDays, now);
+      const filtered = allClients.filter((c) => c.pointsExpiry.status === statusFilter);
+
+      filtered.sort((a, b) => {
+        if (sortField === 'createdAt') {
+          return (new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()) * dir;
+        }
+        return String(a[sortField] ?? '').localeCompare(String(b[sortField] ?? ''), 'es') * dir;
+      });
+
+      const total = filtered.length;
+      const start = (Number(page) - 1) * Number(limit);
+      const clients = filtered.slice(start, start + Number(limit));
+
+      res.json({
+        clients,
+        pagination: {
+          page: Number(page),
+          limit: Number(limit),
+          total,
+          pages: Math.ceil(total / Number(limit)),
+        },
+      });
+      return;
+    }
+
+    const [users, total] = await Promise.all([
       prisma.user.findMany({
         where,
-        orderBy,
+        orderBy: { [sortField]: sortOrder === 'asc' ? 'asc' : 'desc' },
         skip: (Number(page) - 1) * Number(limit),
         take: Number(limit),
         include: { clientProfile: true },
       }),
       prisma.user.count({ where }),
     ]);
-    
+
+    const clients = await withPointsExpiry(users, expiryConfigDays, windowDays, now);
+
     res.json({
-      clients: clients.map(u => ({
-        id: u.id,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        dni: u.dni,
-        email: u.email,
-        phone: u.phone,
-        birthDate: u.birthDate,
-        isActive: u.isActive,
-        createdAt: u.createdAt,
-        clientProfile: u.clientProfile ? {
-          currentPoints: u.clientProfile.currentPoints,
-          totalPointsEarned: u.clientProfile.totalPointsEarned,
-          totalPointsRedeemed: u.clientProfile.totalPointsRedeemed,
-          lastPurchaseAt: u.clientProfile.lastPurchaseAt,
-        } : null,
-      })),
+      clients,
       pagination: {
         page: Number(page),
         limit: Number(limit),

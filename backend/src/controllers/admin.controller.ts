@@ -76,6 +76,14 @@ export const getUserById = async (req: AuthRequest, res: Response, next: NextFun
     
     if (!user) throw new AppError(404, 'Usuario no encontrado');
     
+    // Últimos movimientos del cliente (para el modal de detalle del ojito)
+    const recentTransactions = await prisma.transaction.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      include: { items: { include: { product: true } } },
+    });
+    
     res.json({
       id: user.id,
       email: user.email,
@@ -89,6 +97,21 @@ export const getUserById = async (req: AuthRequest, res: Response, next: NextFun
       createdAt: user.createdAt,
       clientProfile: user.clientProfile,
       branch: user.branch,
+      recentTransactions: recentTransactions.map(t => ({
+        id: t.id,
+        type: t.type,
+        total: Number(t.total),
+        pointsEarned: t.pointsEarned,
+        pointsBalance: t.pointsBalance,
+        description: t.description,
+        createdAt: t.createdAt,
+        items: t.items.map(i => ({
+          productName: i.product.name,
+          quantity: i.quantity,
+          unitPrice: Number(i.unitPrice),
+          lineTotal: Number(i.lineTotal),
+        })),
+      })),
     });
   } catch (error) {
     next(error);

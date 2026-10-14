@@ -232,7 +232,6 @@ export default function ClientHome() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-white">
       <ClientHeader
-        title="Club Robles"
         subtitle="Tu club de beneficios"
         right={
           <div className="text-right">
@@ -420,7 +419,7 @@ export default function ClientHome() {
         {!promotions.length && !challenges.length && !coupons.length && !recentPurchases.length && !benefits.length && (
           <div className="text-center py-12">
             <Award className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-            <h2 className="text-xl font-semibold text-gray-900 mb-2">¡Bienvenido a Club Robles!</h2>
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">¡Bienvenido a Robles Club!</h2>
             <p className="text-gray-500 mb-6">Comienza a comprar para ganar puntos, subir de nivel y desbloquear beneficios exclusivos.</p>
             <button onClick={() => navigate('/app/purchases/new')} className="btn-primary px-6 py-3">
               Realizar mi primera compra

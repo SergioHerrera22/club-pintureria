@@ -5,7 +5,8 @@ import { cn } from '../lib/utils';
 import logoUrl from '../assets/robles-logo.png';
 
 interface ClientHeaderProps {
-  title: string;
+  /** Título de la página (opcional: en la home el logo representa la marca) */
+  title?: string;
   subtitle?: React.ReactNode;
   backTo?: string;
   maxWidth?: 'md' | '3xl' | '4xl';
@@ -42,8 +43,8 @@ export default function ClientHeader({ title, subtitle, backTo, maxWidth = '4xl'
               className="w-10 h-10 rounded-xl object-cover flex-shrink-0"
             />
             <div className="min-w-0">
-              <h1 className="text-xl font-bold text-gray-900 truncate">{title}</h1>
-              {subtitle && <p className="text-sm text-gray-500 truncate">{subtitle}</p>}
+              {title && <h1 className="text-xl font-bold text-gray-900 truncate">{title}</h1>}
+              {subtitle && <p className={cn('text-sm text-gray-500 truncate', !title && 'font-medium text-gray-900')}>{subtitle}</p>}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">

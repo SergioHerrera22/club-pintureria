@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatDateTime } from '../lib/utils';
-import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 const dniSchema = z.object({
   dni: z.string().min(7, 'DNI debe tener al menos 7 dígitos').max(8, 'DNI inválido'),
@@ -48,6 +48,44 @@ interface ClientData {
     totalPointsRedeemed: number;
     lastPurchaseAt?: string;
   } | null;
+  pointsExpiry?: {
+    status: 'ok' | 'expiring' | 'expired';
+    daysLeft: number | null;
+    lastActivityAt?: string | null;
+  };
+}
+
+type ExpiryStatus = NonNullable<ClientData['pointsExpiry']>['status'];
+
+const expiryBadgeConfig: Record<ExpiryStatus, {
+  icon: React.ComponentType<{ className?: string }>;
+  className: string;
+  label: (daysLeft: number | null) => string;
+}> = {
+  ok: { icon: CheckCircle2, className: 'badge-success', label: () => 'Al día' },
+  expiring: {
+    icon: Clock,
+    className: 'badge-warning',
+    label: (daysLeft) => (daysLeft != null ? `Vence en ${daysLeft} día${daysLeft === 1 ? '' : 's'}` : 'Por vencer'),
+  },
+  expired: { icon: AlertTriangle, className: 'badge-danger', label: () => 'Puntos vencidos' },
+};
+
+const rowTint: Record<ExpiryStatus, string> = {
+  ok: '',
+  expiring: 'bg-amber-50/60 hover:bg-amber-50',
+  expired: 'bg-red-50/60 hover:bg-red-50',
+};
+
+function ExpiryBadge({ info }: { info: NonNullable<ClientData['pointsExpiry']> }) {
+  const config = expiryBadgeConfig[info.status] ?? expiryBadgeConfig.ok;
+  const Icon = config.icon;
+  return (
+    <span className={cn('badge gap-1', config.className)}>
+      <Icon className="w-3.5 h-3.5" />
+      {config.label(info.daysLeft)}
+    </span>
+  );
 }
 
 interface Transaction {
@@ -90,6 +128,8 @@ function Clients() {
   const [filters, setFilters] = useState({
     search: '',
     isActive: '',
+    expiryStatus: '',
+    expiryDays: '30',
     sortBy: 'createdAt',
     sortOrder: 'desc',
   });
@@ -135,6 +175,8 @@ function Clients() {
       });
       if (filters.search) params.append('search', filters.search);
       if (filters.isActive !== '') params.append('isActive', filters.isActive);
+      if (filters.expiryStatus) params.append('expiryStatus', filters.expiryStatus);
+      if (filters.expiryStatus === 'expiring') params.append('expiryDays', filters.expiryDays);
       
       const response = await api.get<{ clients: ClientData[]; pagination: { page: number; limit: number; total: number; pages: number } }>(`/clients?${params.toString()}`);
       setClients(response.data.clients);
@@ -146,7 +188,7 @@ function Clients() {
     }
   };
 
-  useEffect(() => { fetchClients(); }, [pagination.page, filters.search, filters.isActive, filters.sortBy, filters.sortOrder]);
+  useEffect(() => { fetchClients(); }, [pagination.page, filters.search, filters.isActive, filters.expiryStatus, filters.expiryDays, filters.sortBy, filters.sortOrder]);
 
   const handleSearch = async (data: DniForm) => {
     setSearchLoading(true);
@@ -272,16 +314,41 @@ function Clients() {
               className="input pl-10"
             />
           </div>
-          <div className="flex gap-2 sm:flex-row">
+          <div className="flex flex-wrap gap-2 sm:flex-row">
             <select
               value={filters.isActive}
               onChange={(e) => { setFilters({ ...filters, isActive: e.target.value }); setPagination(prev => ({ ...prev, page: 1 })); }}
-              className="input w-40"
+              className="input w-36"
             >
               <option value="">Todos</option>
               <option value="true">Activos</option>
               <option value="false">Inactivos</option>
             </select>
+            <select
+              value={filters.expiryStatus}
+              onChange={(e) => { setFilters({ ...filters, expiryStatus: e.target.value }); setPagination(prev => ({ ...prev, page: 1 })); }}
+              className="input w-44"
+            >
+              <option value="">Puntos: todos</option>
+              <option value="expiring">Por vencer</option>
+              <option value="expired">Vencidos</option>
+              <option value="ok">Al día</option>
+            </select>
+            {filters.expiryStatus === 'expiring' && (
+              <div className="relative w-32">
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={filters.expiryDays}
+                  onChange={(e) => { setFilters({ ...filters, expiryDays: e.target.value }); setPagination(prev => ({ ...prev, page: 1 })); }}
+                  className="input pr-12"
+                  placeholder="30"
+                  title="Filtrar clientes con puntos que vencen dentro de esta cantidad de días"
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 pointer-events-none">días</span>
+              </div>
+            )}
             <select
               value={filters.sortBy}
               onChange={(e) => { setFilters({ ...filters, sortBy: e.target.value }); setPagination(prev => ({ ...prev, page: 1 })); }}
@@ -294,7 +361,7 @@ function Clients() {
               <option value="email">Email</option>
             </select>
 <button
-              onClick={() => { setFilters({ search: '', isActive: '', sortBy: 'createdAt', sortOrder: 'desc' }); setPagination(prev => ({ ...prev, page: 1 })); }}
+              onClick={() => { setFilters({ search: '', isActive: '', expiryStatus: '', expiryDays: '30', sortBy: 'createdAt', sortOrder: 'desc' }); setPagination(prev => ({ ...prev, page: 1 })); }}
               className="btn-outline flex items-center gap-1"
             >
               <X className="w-4 h-4" /> Limpiar
@@ -332,6 +399,7 @@ function Clients() {
                     <th className="p-4 font-medium hidden lg:table-cell">Email</th>
                     <th className="p-4 font-medium hidden lg:table-cell">Teléfono</th>
                     <th className="p-4 font-medium text-right">Puntos</th>
+                    <th className="p-4 font-medium hidden lg:table-cell">Vencimiento</th>
                     <th className="p-4 font-medium hidden md:table-cell">Última compra</th>
                     <th className="p-4 font-medium">Estado</th>
                     <th className="p-4 font-medium text-right">Acciones</th>
@@ -340,14 +408,17 @@ function Clients() {
                 <tbody className="divide-y divide-gray-200">
                   {clients.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="p-8 text-center text-gray-500">
+                      <td colSpan={9} className="p-8 text-center text-gray-500">
                         <User className="w-12 h-12 mx-auto mb-3 text-gray-300" />
                         <p>No se encontraron clientes</p>
                       </td>
                     </tr>
                   ) : (
                     clients.map((client) => (
-                      <tr key={client.id} className="hover:bg-gray-50">
+                      <tr
+                        key={client.id}
+                        className={cn('hover:bg-gray-50', client.pointsExpiry && rowTint[client.pointsExpiry.status])}
+                      >
                         <td className="p-4">
                           <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
@@ -364,6 +435,13 @@ function Clients() {
                         <td className="p-4 hidden lg:table-cell text-sm text-gray-500">{client.phone || '-'}</td>
                         <td className="p-4 text-right font-semibold text-primary-600">
                           {client.clientProfile ? formatNumber(client.clientProfile.currentPoints) : 0}
+                        </td>
+                        <td className="p-4 hidden lg:table-cell">
+                          {client.pointsExpiry ? (
+                            <ExpiryBadge info={client.pointsExpiry} />
+                          ) : (
+                            <span className="badge badge-gray">-</span>
+                          )}
                         </td>
                         <td className="p-4 hidden md:table-cell text-sm text-gray-500">
                           {client.clientProfile?.lastPurchaseAt ? formatDateTime(client.clientProfile.lastPurchaseAt) : 'Nunca'}

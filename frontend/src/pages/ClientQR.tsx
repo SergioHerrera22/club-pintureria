@@ -213,7 +213,7 @@ export default function ClientQR() {
               onClick={() => {
                 if (navigator.share) {
                   navigator.share({
-                    title: 'Mi QR Club Robles',
+                    title: 'Mi QR Robles Club',
                     text: 'Mi código QR para identificarme en caja',
                     url: qrData.qr.url,
                   });

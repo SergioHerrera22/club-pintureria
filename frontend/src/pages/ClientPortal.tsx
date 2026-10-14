@@ -229,10 +229,9 @@ export default function ClientPortal() {
           <img
             src={logoUrl}
             alt="Robles Club"
-            className="w-20 h-20 rounded-2xl object-cover mx-auto mb-4 shadow-md"
+            className="w-24 h-24 rounded-2xl object-cover mx-auto mb-5 shadow-md"
           />
-          <h1 className="text-3xl font-bold text-primary-600">Club Robles</h1>
-          <h2 className="mt-3 text-xl font-semibold text-gray-800">{titles[step].title}</h2>
+          <h2 className="text-xl font-semibold text-gray-800">{titles[step].title}</h2>
           <p className="mt-1 text-gray-600">{titles[step].subtitle}</p>
         </div>
 

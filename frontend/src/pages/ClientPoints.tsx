@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { cn, formatNumber, formatCurrency, formatDateTime } from '../lib/utils';
 import { Search, Award, Loader2, History, ChevronDown, ChevronUp, Home, Gift, ArrowRight, CheckCircle } from 'lucide-react';
+import logoUrl from '../assets/robles-logo.png';
 import { ClientPointsData } from '../types';
 
 interface Transaction {
@@ -202,11 +203,13 @@ export default function ClientPoints() {
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center">
-                <Award className="w-6 h-6 text-white" />
-              </div>
+              <img
+                src={logoUrl}
+                alt="Robles Club"
+                className="w-10 h-10 rounded-xl object-cover"
+              />
               <div>
-                <h1 className="text-xl font-bold text-gray-900">Club Robles</h1>
+                <h1 className="text-xl font-bold text-gray-900">Robles Club</h1>
                 <p className="text-sm text-gray-500">Consulta tus puntos</p>
               </div>
             </div>

@@ -47,10 +47,9 @@ export default function Login() {
           <img
             src={logoUrl}
             alt="Robles Club"
-            className="w-20 h-20 rounded-2xl object-cover mx-auto mb-4 shadow-md"
+            className="w-24 h-24 rounded-2xl object-cover mx-auto mb-5 shadow-md"
           />
-          <h1 className="text-3xl font-bold text-primary-600">Club Robles</h1>
-          <p className="mt-2 text-gray-600">Inicia sesión para continuar</p>
+          <p className="text-gray-600">Inicia sesión para continuar</p>
         </div>
         
         <div className="card p-6">
