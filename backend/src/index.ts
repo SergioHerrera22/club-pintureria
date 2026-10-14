@@ -4,13 +4,11 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import path from 'path';
 import fs from 'fs';
-import net from 'net';
-import tls from 'tls';
-import dns from 'dns';
 import { config } from './config';
 import { prisma } from './config/prisma';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import authRoutes from './routes/auth.routes';
+import clientPortalRoutes from './routes/clientPortal.routes';
 import clientRoutes from './routes/client.routes';
 import adminRoutes from './routes/admin.routes';
 import productRoutes from './routes/product.routes';
@@ -32,7 +30,24 @@ import campaignRoutes from './routes/campaign.routes';
 
 const app = express();
 
-app.use(helmet());
+// Detrás del proxy de Hostinger: req.ip refleja la IP real del visitante
+app.set('trust proxy', 1);
+
+// CSP configurada para permitir imagenes por URL externa (links https:// pegados en el admin)
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+        fontSrc: ["'self'", 'data:', 'https:'],
+        connectSrc: ["'self'", 'https:'],
+      },
+    },
+  })
+);
 app.use(cors(config.cors));
 app.use(express.json());
 app.use(morgan(config.nodeEnv === 'production' ? 'combined' : 'dev'));
@@ -53,111 +68,26 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'db-diag-3';
-
-async function probeTcp(host: string, port: number, timeoutMs = 8000): Promise<string> {
-  return new Promise((resolve) => {
-    const socket = new net.Socket();
-    const finish = (result: string) => { socket.destroy(); resolve(result); };
-    socket.setTimeout(timeoutMs);
-    socket.once('connect', () => finish('ok'));
-    socket.once('timeout', () => finish('timeout'));
-    socket.once('error', (e: Error) => finish(`error: ${e.message}`));
-    socket.connect(port, host);
-  });
-}
-
-// Handshake real de Postgres: SSLRequest -> TLS -> StartupMessage -> 1ra respuesta del server
-async function probePostgres(host: string, port: number, user: string, timeoutMs = 10000): Promise<string> {
-  return new Promise((resolve) => {
-    const raw = new net.Socket();
-    let settled = false;
-    const finish = (result: string) => {
-      if (settled) return;
-      settled = true;
-      try { raw.destroy(); } catch { /* noop */ }
-      resolve(result);
-    };
-    raw.setTimeout(timeoutMs);
-    raw.once('timeout', () => finish('timeout'));
-    raw.once('error', (e: Error) => finish(`error: ${e.message}`));
-    raw.once('connect', () => {
-      const sslReq = Buffer.alloc(8);
-      sslReq.writeInt32BE(8, 0);
-      sslReq.writeInt32BE(80877103, 4); // SSLRequest code
-      raw.write(sslReq);
-    });
-    raw.once('data', (d: Buffer) => {
-      raw.removeAllListeners('data');
-      if (d.toString('latin1', 0, 1) !== 'S') return finish('server-no-ssl');
-      const tlsSock = tls.connect({ socket: raw, servername: host, rejectUnauthorized: false });
-      tlsSock.once('secureConnect', () => {
-        // StartupMessage protocolo 3.0 con el usuario indicado
-        const params = Buffer.from(`user\0${user}\0database\0postgres\0`, 'latin1');
-        const len = 8 + params.length;
-        const start = Buffer.alloc(len);
-        start.writeInt32BE(len, 0);
-        start.writeInt32BE(196608, 4);
-        params.copy(start, 8);
-        tlsSock.write(start);
-      });
-      tlsSock.once('error', (e: Error) => finish(`tls-error: ${e.message}`));
-      tlsSock.once('data', (d2: Buffer) => {
-        const tag = d2.toString('latin1', 0, 1);
-        if (tag === 'R') return finish('pg-auth-request (pooler y DB responden, llega a autenticacion)');
-        if (tag === 'E') {
-          const segs = d2.slice(5).toString('latin1').split('\0').filter(s => s.length > 0);
-          return finish(`pg-error [${segs.join(' | ')}]`);
-        }
-        return finish(`pg-unexpected: ${d2.toString('latin1', 0, 60)}`);
-      });
-    });
-    raw.connect(port, host);
-  });
-}
+const APP_VERSION = 'client-portal-1';
 
 app.get('/health', async (req, res) => {
-  let db: string = 'ok';
+  let db = 'ok';
   try {
     await prisma.$queryRaw`SELECT 1`;
-  } catch (err) {
-    db = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  } catch {
+    db = 'error';
   }
-
-  let dbHost = 'desconocido';
-  try {
-    dbHost = new URL(process.env.DATABASE_URL || '').hostname || dbHost;
-  } catch { /* URL invalida */ }
-
-  const network: Record<string, string> = {};
-  try {
-    const addrs = await dns.promises.lookup(dbHost, { all: true });
-    network.dns = addrs.map(a => `${a.address}(${a.family})`).join(', ');
-  } catch (e) {
-    network.dns = `fail: ${(e as Error).message}`;
-  }
-  network[`tcp_${dbHost}:5432`] = await probeTcp(dbHost, 5432);
-  network[`tcp_${dbHost}:6543`] = await probeTcp(dbHost, 6543);
-  network['tcp_control_registry.npmjs.org:443'] = await probeTcp('registry.npmjs.org', 443);
-  let dbUser = 'desconocido';
-  try { dbUser = decodeURIComponent(new URL(process.env.DATABASE_URL || '').username) || dbUser; } catch { /* URL invalida */ }
-  network.dbUser = dbUser;
-  network.handshake_usuario_configurado = await probePostgres(dbHost, 5432, dbUser);
-  network.handshake_usuario_con_ref = await probePostgres(dbHost, 5432, 'postgres.kspukexawbqgfzaoruws');
-  const proxyVars = ['HTTP_PROXY', 'HTTPS_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'all_proxy'];
-  network.proxy = proxyVars.filter(v => process.env[v]).join(',') || 'none';
-
   res.json({
     status: 'ok',
     version: APP_VERSION,
     timestamp: new Date().toISOString(),
     frontend: frontendDist ? 'served' : 'not-found',
     db,
-    network,
   });
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/client-portal', clientPortalRoutes);
 app.use('/api/clients', clientRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/products', productRoutes);

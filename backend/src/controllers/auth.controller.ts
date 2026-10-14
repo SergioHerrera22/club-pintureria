@@ -9,7 +9,7 @@ import { AuthRequest } from '../middleware/auth';
 
 import { SignOptions } from 'jsonwebtoken';
 
-const generateTokens = (user: { id: string; email: string; role: string; dni: string; branchId?: string | null }) => {
+export const generateTokens = (user: { id: string; email: string; role: string; dni: string; branchId?: string | null }) => {
   const accessOptions: SignOptions = { expiresIn: config.jwt.expiresIn as SignOptions['expiresIn'] };
   const refreshOptions: SignOptions = { expiresIn: config.jwt.refreshExpiresIn as SignOptions['expiresIn'] };
   

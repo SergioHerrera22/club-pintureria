@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -124,9 +125,12 @@ export default function Login() {
           </form>
           
           <div className="mt-6 text-center text-sm text-gray-500">
-            <p>Credenciales de prueba:</p>
-            <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">admin@clubpintureria.com / 123456</p>
-            <p className="mt-1 font-mono text-xs bg-gray-100 px-2 py-1 rounded">cajera@clubpintureria.com / 123456</p>
+            <p>
+              ¿Sos cliente?{' '}
+              <Link to="/users" className="font-medium text-primary-600 hover:text-primary-700">
+                Entrá a tu portal por acá
+              </Link>
+            </p>
           </div>
         </div>
       </div>

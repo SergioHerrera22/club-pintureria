@@ -12,6 +12,9 @@ interface AuthState {
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (data: RegisterData) => Promise<void>;
+  clientPortalLogin: (data: ClientPortalLoginData) => Promise<void>;
+  clientPortalClaim: (data: ClientPortalClaimData) => Promise<void>;
+  clientPortalRegister: (data: ClientPortalRegisterData) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
   setTokens: (accessToken: string, refreshToken: string) => void;
@@ -31,6 +34,27 @@ interface RegisterData {
   phone?: string;
   birthDate?: string;
   role?: string;
+}
+
+interface ClientPortalLoginData {
+  dni: string;
+  password: string;
+}
+
+interface ClientPortalClaimData {
+  dni: string;
+  phone?: string;
+  email?: string;
+  password: string;
+}
+
+interface ClientPortalRegisterData {
+  dni: string;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  email?: string;
+  password: string;
 }
 
 interface AuthResponse {
@@ -63,7 +87,7 @@ export const useAuthStore = create<AuthState>()(
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
           // Start auto-refresh after login
-          get().startAutoRefresh(3000);
+          get().startAutoRefresh(60000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -77,7 +101,51 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          get().startAutoRefresh(3000);
+          get().startAutoRefresh(60000);
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      // ===== Portal de clientes (/users) =====
+
+      clientPortalLogin: async (data) => {
+        set({ isLoading: true });
+        try {
+          const response = await api.post<AuthResponse>('/client-portal/login', data);
+          const { user, accessToken, refreshToken } = response.data;
+          get().setTokens(accessToken, refreshToken);
+          set({ user, isLoading: false });
+          get().startAutoRefresh(60000);
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      clientPortalClaim: async (data) => {
+        set({ isLoading: true });
+        try {
+          const response = await api.post<AuthResponse>('/client-portal/claim', data);
+          const { user, accessToken, refreshToken } = response.data;
+          get().setTokens(accessToken, refreshToken);
+          set({ user, isLoading: false });
+          get().startAutoRefresh(60000);
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      clientPortalRegister: async (data) => {
+        set({ isLoading: true });
+        try {
+          const response = await api.post<AuthResponse>('/client-portal/register', data);
+          const { user, accessToken, refreshToken } = response.data;
+          get().setTokens(accessToken, refreshToken);
+          set({ user, isLoading: false });
+          get().startAutoRefresh(60000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -98,8 +166,15 @@ export const useAuthStore = create<AuthState>()(
         try {
           const response = await api.get<User>('/auth/me');
           set({ user: response.data });
-        } catch {
-          get().logout();
+        } catch (error: any) {
+          // Solo cerrar sesión si el token ya no es válido (401/403).
+          // Errores transitorios (500/503, timeout, red) NO deben desloguear:
+          // el interceptor de api.ts ya reintentará y renovará el token.
+          const status = error?.response?.status;
+          if (status === 401 || status === 403) {
+            get().logout();
+          }
+          // En otro caso, mantener la sesión y el usuario actual.
         }
       },
       
@@ -160,7 +235,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   useEffect(() => {
     if (isAuthenticated) {
-      startAutoRefresh(3000);
+      startAutoRefresh(60000);
     } else {
       stopAutoRefresh();
     }

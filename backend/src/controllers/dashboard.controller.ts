@@ -62,7 +62,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       }),
       prisma.purchase.count({ where: { status: 'COMPLETADA', ...(branchId ? { branchId: branchId } : {}) } }),
       prisma.purchase.aggregate({
-        where: { status: 'COMPLETADA', ...(branchId ? { branchId: branchId } : {}) },
+        where: { status: 'COMPLETADA', createdAt: { gte: startOfMonth }, ...(branchId ? { branchId: branchId } : {}) },
         _sum: { total: true },
       }),
       prisma.purchase.count({ where: { status: 'COMPLETADA', createdAt: { gte: startOfDay }, ...(branchId ? { branchId } : {}) } }),

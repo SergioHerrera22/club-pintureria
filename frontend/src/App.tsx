@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { getHomeForRole } from './lib/utils';
 import Layout from './components/Layout';
 import Login from './pages/Login';
+import ClientPortal from './pages/ClientPortal';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
 import ClientRegister from './pages/ClientRegister';
@@ -85,6 +86,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      {/* Portal de clientes: alta y login autogestionados por DNI */}
+      <Route path="/users" element={<PublicRoute><ClientPortal /></PublicRoute>} />
       
       {/* Admin/Cajera routes with Layout */}
       <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Layout /></ProtectedRoute>}>

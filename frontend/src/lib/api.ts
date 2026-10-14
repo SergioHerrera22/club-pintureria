@@ -37,7 +37,24 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
-    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean; _retryCount?: number };
+    
+    // Reintento automático para errores transitorios del servidor (5xx) o de red.
+    // Evita que una falla momentánea (pool de DB saturado, restart del server)
+    // rompa la pantalla del dashboard.
+    const status = error.response?.status;
+    const isServerError = !!status && status >= 500;
+    const isNetworkError = !error.response; // timeout, DNS, conexión rechazada...
+    const isIdempotent = !originalRequest.method || ['get', 'head', 'options'].includes(originalRequest.method.toLowerCase());
+    
+    if ((isServerError || isNetworkError) && isIdempotent) {
+      originalRequest._retryCount = (originalRequest._retryCount || 0) + 1;
+      if (originalRequest._retryCount <= 2) {
+        const delay = 500 * originalRequest._retryCount; // 500ms, 1000ms
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        return api(originalRequest);
+      }
+    }
     
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
@@ -76,7 +93,15 @@ api.interceptors.response.use(
         localStorage.removeItem('accessToken');
         localStorage.removeItem('refreshToken');
         localStorage.removeItem('user');
-        window.location.href = '/login';
+        // Redirigir según el rol guardado: clientes al portal, personal al login
+        let redirectTarget = '/login';
+        try {
+          const persisted = JSON.parse(localStorage.getItem('auth-storage') || 'null');
+          if (persisted?.state?.user?.role === 'CLIENTE') {
+            redirectTarget = '/users';
+          }
+        } catch { /* usar /login */ }
+        window.location.href = redirectTarget;
         return Promise.reject(err);
       } finally {
         isRefreshing = false;

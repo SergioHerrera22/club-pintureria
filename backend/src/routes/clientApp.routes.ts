@@ -11,12 +11,12 @@ import { PointsService } from '../services/points.service';
 import { emailService } from '../services/email.service';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
-import { authenticate, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
-// Todas las rutas requieren autenticación de cliente
-router.use(authenticate);
+// Todas las rutas requieren autenticación y rol CLIENTE
+router.use(authenticate, authorize('CLIENTE'));
 
 // ===== HOME CLIENTE =====
 router.get('/home', async (req, res, next) => {
