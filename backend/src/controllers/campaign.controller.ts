@@ -30,3 +30,13 @@ export const sendCampaign = async (req: AuthRequest, res: Response, next: NextFu
     next(error);
   }
 };
+
+export const prepareCampaign = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { message, sendToAll, recipientIds, testPhone } = req.body;
+    const result = await CampaignService.prepareCampaign({ message, sendToAll, recipientIds, testPhone });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};

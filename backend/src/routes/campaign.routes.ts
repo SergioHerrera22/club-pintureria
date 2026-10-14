@@ -21,5 +21,6 @@ const sendCampaignSchema = z.object({
 });
 
 router.post('/send', validate(sendCampaignSchema), campaignController.sendCampaign);
+router.post('/prepare', validate(sendCampaignSchema), campaignController.prepareCampaign);
 
 export default router;

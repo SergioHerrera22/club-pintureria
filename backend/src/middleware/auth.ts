@@ -19,6 +19,33 @@ export interface AuthRequest extends Request {
 export const NO_BRANCH = '__NO_BRANCH__';
 
 /**
+ * Caché en memoria de usuarios autenticados (TTL corto).
+ * Evita consultar la DB en CADA request autenticado, lo que satura el pool
+ * de conexiones cuando el frontend dispara varias requests en paralelo.
+ * TTL de 15s: un usuario desactivado deja de pasar en ese plazo.
+ */
+const USER_CACHE_TTL_MS = 15_000;
+const userCache = new Map<string, { user: AuthRequest['user']; expiresAt: number }>();
+
+function getCachedUser(id: string) {
+  const cached = userCache.get(id);
+  if (cached && cached.expiresAt > Date.now()) return cached.user;
+  if (cached) userCache.delete(id);
+  return null;
+}
+
+function setCachedUser(id: string, user: AuthRequest['user']) {
+  // Limpieza simple para que el mapa no crezca indefinidamente
+  if (userCache.size > 500) {
+    const now = Date.now();
+    for (const [key, value] of userCache) {
+      if (value.expiresAt <= now) userCache.delete(key);
+    }
+  }
+  userCache.set(id, { user, expiresAt: Date.now() + USER_CACHE_TTL_MS });
+}
+
+/**
  * Resuelve el scope de sucursal para el usuario autenticado.
  * - ADMIN: ve todo (scope global, isGlobal=true, branchId null).
  * - CAJERA/VENDEDOR: solo datos de su propia sucursal.
@@ -53,14 +80,21 @@ export const authenticate = async (
       dni: string;
     };
     
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true },
-    });
+    let user = getCachedUser(decoded.id);
     
-    if (!user || !user.isActive) {
-      res.status(401).json({ error: 'Usuario no válido o inactivo' });
-      return;
+    if (!user) {
+      const dbUser = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true },
+      });
+      
+      if (!dbUser || !dbUser.isActive) {
+        res.status(401).json({ error: 'Usuario no válido o inactivo' });
+        return;
+      }
+      
+      user = dbUser;
+      setCachedUser(decoded.id, user);
     }
     
     req.user = user;
@@ -72,6 +106,18 @@ export const authenticate = async (
     }
     if (error instanceof jwt.JsonWebTokenError) {
       res.status(401).json({ error: 'Token inválido' });
+      return;
+    }
+    // Errores de conexión/timeouts de DB: no son un fallo del token ni un error
+    // lógico. 503 le indica al frontend que reintente sin desloguear al usuario.
+    const isDbError =
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      typeof (error as { code?: unknown }).code === 'string' &&
+      (error as { code: string }).code.startsWith('P');
+    if (isDbError) {
+      res.status(503).json({ error: 'Servicio temporalmente no disponible, intente nuevamente' });
       return;
     }
     next(error);

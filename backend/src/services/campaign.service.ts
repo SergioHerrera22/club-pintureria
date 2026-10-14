@@ -28,6 +28,21 @@ export interface CampaignResult {
   errors: Array<{ recipient: string; error: string }>;
 }
 
+export interface PreparedMessage {
+  id: string;
+  name: string;
+  /** Teléfono normalizado para WhatsApp (con código de país, sin +) */
+  phone: string;
+  /** Mensaje con las variables ya reemplazadas para este destinatario */
+  message: string;
+}
+
+export interface PrepareCampaignResult {
+  isTest: boolean;
+  messages: PreparedMessage[];
+  skipped: Array<{ name: string; phone: string | null; reason: string }>;
+}
+
 export class CampaignService {
   static async getRecipients(): Promise<{
     recipients: CampaignRecipient[];
@@ -104,34 +119,7 @@ export class CampaignService {
       return result;
     }
 
-    let recipients: CampaignRecipient[] = [];
-
-    if (input.sendToAll) {
-      const data = await this.getRecipients();
-      recipients = data.recipients;
-    } else if (input.recipientIds && input.recipientIds.length > 0) {
-      const users = await prisma.user.findMany({
-        where: { id: { in: input.recipientIds }, role: 'CLIENTE' },
-        select: {
-          id: true,
-          firstName: true,
-          lastName: true,
-          dni: true,
-          phone: true,
-          clientProfile: { select: { currentPoints: true } },
-        },
-      });
-      recipients = users.map((u) => ({
-        id: u.id,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        dni: u.dni,
-        phone: u.phone,
-        currentPoints: u.clientProfile?.currentPoints ?? 0,
-      }));
-    } else {
-      throw new AppError(400, 'Seleccioná al menos un destinatario o elegí "todos los clientes"');
-    }
+    const recipients = await this.resolveRecipients(input);
 
     result.total = recipients.length;
 
@@ -160,6 +148,117 @@ export class CampaignService {
           error: 'No se pudo enviar',
         });
       }
+    }
+
+    return result;
+  }
+
+  private static async resolveRecipients(input: SendCampaignInput): Promise<CampaignRecipient[]> {
+    if (input.sendToAll) {
+      const data = await this.getRecipients();
+      return data.recipients;
+    }
+
+    if (input.recipientIds && input.recipientIds.length > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: input.recipientIds }, role: 'CLIENTE' },
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          dni: true,
+          phone: true,
+          clientProfile: { select: { currentPoints: true } },
+        },
+      });
+      return users.map((u) => ({
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        dni: u.dni,
+        phone: u.phone,
+        currentPoints: u.clientProfile?.currentPoints ?? 0,
+      }));
+    }
+
+    throw new AppError(400, 'Seleccioná al menos un destinatario o elegí "todos los clientes"');
+  }
+
+  /**
+   * Prepara la campaña sin enviarla: devuelve el mensaje ya renderizado y el
+   * teléfono normalizado de cada destinatario, para que el frontend abra
+   * WhatsApp Web con el texto precargado.
+   */
+  static async prepareCampaign(input: SendCampaignInput): Promise<PrepareCampaignResult> {
+    const message = (input.message || '').trim();
+    if (!message) {
+      throw new AppError(400, 'El mensaje no puede estar vacío');
+    }
+
+    const company = await SystemConfigService.getCompanyName();
+    const result: PrepareCampaignResult = { isTest: false, messages: [], skipped: [] };
+
+    // Prueba a un único número
+    if (input.testPhone && input.testPhone.trim()) {
+      result.isTest = true;
+      const phone = whatsappService.formatPhoneNumber(input.testPhone.trim());
+      if (!phone) {
+        result.skipped.push({
+          name: 'Número de prueba',
+          phone: input.testPhone.trim(),
+          reason: 'Teléfono inválido',
+        });
+        return result;
+      }
+      result.messages.push({
+        id: 'test',
+        name: 'Mensaje de prueba',
+        phone,
+        message: whatsappService.renderTemplate(message, {
+          nombre: 'Cliente',
+          apellido: '',
+          dni: '',
+          puntos: 0,
+          total: 0,
+          empresa: company,
+        }),
+      });
+      return result;
+    }
+
+    const recipients = await this.resolveRecipients(input);
+
+    for (const recipient of recipients) {
+      const name = `${recipient.firstName} ${recipient.lastName}`.trim();
+
+      if (!recipient.phone || !recipient.phone.trim()) {
+        result.skipped.push({ name: `${name} (${recipient.dni})`, phone: null, reason: 'Sin teléfono' });
+        continue;
+      }
+
+      const phone = whatsappService.formatPhoneNumber(recipient.phone);
+      if (!phone) {
+        result.skipped.push({
+          name: `${name} (${recipient.dni})`,
+          phone: recipient.phone,
+          reason: 'Teléfono inválido para WhatsApp',
+        });
+        continue;
+      }
+
+      result.messages.push({
+        id: recipient.id,
+        name: `${name} (${recipient.dni})`,
+        phone,
+        message: whatsappService.renderTemplate(message, {
+          nombre: recipient.firstName,
+          apellido: recipient.lastName,
+          dni: recipient.dni,
+          puntos: recipient.currentPoints,
+          total: recipient.currentPoints,
+          empresa: company,
+        }),
+      });
     }
 
     return result;

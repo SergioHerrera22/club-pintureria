@@ -3,7 +3,7 @@ import api from '../lib/api';
 import { cn, formatNumber } from '../lib/utils';
 import {
   MessageCircle, Send, Users, Loader2, Search, CheckCircle2, AlertCircle,
-  FileText, Save, Smartphone, X, RefreshCw,
+  FileText, Save, Smartphone, X, RefreshCw, ExternalLink, Copy, SkipForward,
 } from 'lucide-react';
 
 interface CampaignRecipient {
@@ -22,13 +22,29 @@ interface RecipientsResponse {
   withoutPhone: number;
 }
 
-interface CampaignResult {
-  total: number;
-  sent: number;
-  failed: number;
-  skippedNoPhone: number;
+interface PreparedMessage {
+  id: string;
+  name: string;
+  /** Teléfono normalizado para WhatsApp (con código de país, sin +) */
+  phone: string;
+  /** Mensaje con las variables ya reemplazadas para este destinatario */
+  message: string;
+}
+
+interface PrepareCampaignResponse {
   isTest: boolean;
-  errors: Array<{ recipient: string; error: string }>;
+  messages: PreparedMessage[];
+  skipped: Array<{ name: string; phone: string | null; reason: string }>;
+}
+
+interface SendQueue {
+  messages: PreparedMessage[];
+  skipped: PrepareCampaignResponse['skipped'];
+  /** Índice del próximo destinatario a abrir */
+  index: number;
+  opened: number;
+  jumped: number;
+  popupBlocked: boolean;
 }
 
 const TEMPLATE_LABELS: Record<string, string> = {
@@ -57,7 +73,7 @@ export default function Campaigns() {
   const [search, setSearch] = useState('');
   const [testPhone, setTestPhone] = useState('');
   const [sending, setSending] = useState(false);
-  const [result, setResult] = useState<CampaignResult | null>(null);
+  const [queue, setQueue] = useState<SendQueue | null>(null);
   const [error, setError] = useState('');
 
   const fetchRecipients = async () => {
@@ -118,9 +134,14 @@ export default function Campaigns() {
     if (templates[key]) setMessage(templates[key]);
   };
 
+  const openWhatsAppTab = (m: PreparedMessage): boolean => {
+    const url = `https://web.whatsapp.com/send?phone=${m.phone}&text=${encodeURIComponent(m.message)}&type=phone_number&app_absent=0`;
+    const win = window.open(url, '_blank');
+    return !!win;
+  };
+
   const handleSend = async () => {
     setError('');
-    setResult(null);
 
     if (!message.trim()) {
       setError('Escribí el mensaje que querés enviar');
@@ -132,25 +153,81 @@ export default function Campaigns() {
     }
 
     const isTest = testPhone.trim().length > 0;
-    if (!isTest && !confirm(`¿Enviar este mensaje a ${mode === 'all' ? 'TODOS los clientes con WhatsApp' : `${selectedIds.length} cliente(s)`}?`)) {
+    if (
+      !isTest &&
+      !confirm(
+        `¿Abrir WhatsApp Web para enviar este mensaje a ${
+          mode === 'all' ? `TODOS los clientes con WhatsApp (${stats.withPhone})` : `${selectedIds.length} cliente(s)`
+        }?`
+      )
+    ) {
       return;
     }
 
     setSending(true);
     try {
-      const res = await api.post<CampaignResult>('/campaigns/send', {
+      const res = await api.post<PrepareCampaignResponse>('/campaigns/prepare', {
         message,
         sendToAll: !isTest && mode === 'all',
         recipientIds: !isTest && mode === 'selected' ? selectedIds : undefined,
         testPhone: isTest ? testPhone.trim() : undefined,
       });
-      setResult(res.data);
+
+      if (res.data.messages.length === 0) {
+        setError('Ningún destinatario tiene un teléfono de WhatsApp válido');
+        return;
+      }
+
+      // Se aprovecha el click del usuario para abrir la primera pestaña;
+      // si el navegador la bloquea, el panel permite abrirla manualmente.
+      const openedFirst = openWhatsAppTab(res.data.messages[0]) ? 1 : 0;
+
+      setQueue({
+        messages: res.data.messages,
+        skipped: res.data.skipped,
+        index: openedFirst,
+        opened: openedFirst,
+        jumped: 0,
+        popupBlocked: openedFirst === 0,
+      });
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Error al enviar la campaña');
+      setError(err.response?.data?.error || 'Error al preparar la campaña');
     } finally {
       setSending(false);
     }
   };
+
+  const currentMessage = queue && queue.index < queue.messages.length ? queue.messages[queue.index] : null;
+
+  const handleOpenCurrent = () => {
+    if (!queue || !currentMessage) return;
+    const opened = openWhatsAppTab(currentMessage);
+    setQueue((prev) =>
+      prev
+        ? {
+            ...prev,
+            index: opened ? prev.index + 1 : prev.index,
+            opened: opened ? prev.opened + 1 : prev.opened,
+            popupBlocked: !opened,
+          }
+        : prev
+    );
+  };
+
+  const handleSkipCurrent = () => {
+    setQueue((prev) => (prev ? { ...prev, index: prev.index + 1, jumped: prev.jumped + 1, popupBlocked: false } : prev));
+  };
+
+  const handleCopyMessage = async () => {
+    if (!currentMessage) return;
+    try {
+      await navigator.clipboard.writeText(currentMessage.message);
+    } catch {
+      // ignore
+    }
+  };
+
+  const closeQueue = () => setQueue(null);
 
   const handleSaveTemplates = async () => {
     setSavingTemplates(true);
@@ -170,7 +247,7 @@ export default function Campaigns() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Campañas por WhatsApp</h1>
-          <p className="text-gray-500">Editá un mensaje, elegí destinatarios y enviá por WhatsApp</p>
+          <p className="text-gray-500">Editá un mensaje, elegí destinatarios y abrí WhatsApp Web para enviarlo</p>
         </div>
         <div className="flex gap-1 bg-gray-100 rounded-lg p-1 w-full sm:w-auto">
           <button
@@ -348,41 +425,14 @@ export default function Campaigns() {
                 {sending ? <Loader2 className="w-5 h-5 animate-spin" /> : (
                   <>
                     <Send className="w-5 h-5" />
-                    {testPhone.trim() ? 'Enviar prueba' : 'Enviar WhatsApp'}
+                    {testPhone.trim() ? 'Enviar prueba' : 'Enviar por WhatsApp Web'}
                   </>
                 )}
               </button>
             </div>
-
-            {result && (
-              <div className={cn('card p-4 space-y-2 border', result.failed > 0 ? 'border-amber-200 bg-amber-50' : 'border-green-200 bg-green-50')}>
-                <div className="flex items-center gap-2">
-                  {result.failed > 0 ? <AlertCircle className="w-5 h-5 text-amber-600" /> : <CheckCircle2 className="w-5 h-5 text-green-600" />}
-                  <p className="font-semibold text-gray-900">
-                    {result.isTest ? 'Prueba enviada' : 'Campaña enviada'}
-                  </p>
-                </div>
-                <ul className="text-sm text-gray-700 space-y-1">
-                  <li>Enviados: <strong>{result.sent}</strong></li>
-                  {!result.isTest && <li>Sin teléfono (omitidos): <strong>{result.skippedNoPhone}</strong></li>}
-                  {result.failed > 0 && <li>Fallidos: <strong>{result.failed}</strong></li>}
-                </ul>
-                {result.errors.length > 0 && (
-                  <details className="text-xs text-gray-600">
-                    <summary className="cursor-pointer">Ver errores ({result.errors.length})</summary>
-                    <ul className="mt-1 space-y-0.5">
-                      {result.errors.slice(0, 20).map((e, i) => (
-                        <li key={i}>{e.recipient}: {e.error}</li>
-                      ))}
-                    </ul>
-                  </details>
-                )}
-              </div>
-            )}
           </div>
         </div>
       ) : (
-        /* Templates tab */
         <div className="space-y-4">
           <div className="card p-4 sm:p-5">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
@@ -420,6 +470,119 @@ export default function Campaigns() {
             <button onClick={fetchTemplates} className="btn-outline flex items-center gap-2">
               <RefreshCw className="w-4 h-4" /> Recargar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Cola de envío por WhatsApp Web */}
+      {queue && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-4 border-b border-gray-100">
+              <div>
+                <h2 className="font-semibold text-gray-900">Enviar por WhatsApp Web</h2>
+                <p className="text-xs text-gray-500">
+                  {currentMessage
+                    ? `Pendientes: ${queue.messages.length - queue.index} de ${queue.messages.length}`
+                    : 'Listo'}
+                </p>
+              </div>
+              <button onClick={closeQueue} className="text-gray-400 hover:text-gray-600" aria-label="Cerrar">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 space-y-4">
+              <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-600 transition-all"
+                  style={{ width: `${Math.round((queue.index / queue.messages.length) * 100)}%` }}
+                />
+              </div>
+
+              {currentMessage ? (
+                <>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-900 truncate">{currentMessage.name}</p>
+                      <p className="text-xs text-gray-500">+{currentMessage.phone}</p>
+                    </div>
+                    <span className="text-xs font-medium text-gray-500 flex-shrink-0">
+                      {queue.index + 1} / {queue.messages.length}
+                    </span>
+                  </div>
+
+                  {queue.popupBlocked && (
+                    <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-xs">
+                      <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                      El navegador bloqueó la pestaña. Habilitá las ventanas emergentes para este sitio y volvé a
+                      abrir, o usá "Copiar mensaje" y pegalo en WhatsApp Web.
+                    </div>
+                  )}
+
+                  <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-sm text-gray-700 whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                    {currentMessage.message}
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={handleOpenCurrent}
+                      className="btn-primary flex-1 py-2.5 flex items-center justify-center gap-2"
+                    >
+                      <ExternalLink className="w-4 h-4" /> Abrir WhatsApp Web
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCopyMessage}
+                      className="btn-outline py-2.5 px-3 flex items-center justify-center gap-2"
+                      title="Copiar mensaje al portapapeles"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSkipCurrent}
+                      className="btn-outline py-2.5 px-3 flex items-center justify-center gap-2"
+                    >
+                      <SkipForward className="w-4 h-4" /> Saltar
+                    </button>
+                  </div>
+
+                  <p className="text-xs text-gray-500">
+                    Se abre una pestaña de WhatsApp Web con el chat y el mensaje ya escrito. Enviá el mensaje en
+                    WhatsApp y volvé acá para pasar al siguiente.
+                  </p>
+                </>
+              ) : (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    <p className="font-semibold text-gray-900">Cola finalizada</p>
+                  </div>
+                  <ul className="text-sm text-gray-700 space-y-1">
+                    <li>Pestañas abiertas: <strong>{queue.opened}</strong></li>
+                    <li>Saltados: <strong>{queue.jumped}</strong></li>
+                    {queue.skipped.length > 0 && (
+                      <li>Sin WhatsApp válido: <strong>{queue.skipped.length}</strong></li>
+                    )}
+                  </ul>
+                  {queue.skipped.length > 0 && (
+                    <details className="text-xs text-gray-600">
+                      <summary className="cursor-pointer">Ver destinatarios omitidos ({queue.skipped.length})</summary>
+                      <ul className="mt-1 space-y-0.5">
+                        {queue.skipped.slice(0, 20).map((s, i) => (
+                          <li key={i}>{s.name}: {s.reason}{s.phone ? ` (${s.phone})` : ''}</li>
+                        ))}
+                      </ul>
+                    </details>
+                  )}
+                  <button type="button" onClick={closeQueue} className="btn-primary w-full py-2.5">
+                    Cerrar
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

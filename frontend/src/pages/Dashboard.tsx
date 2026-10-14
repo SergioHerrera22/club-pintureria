@@ -92,6 +92,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [recentLoading, setRecentLoading] = useState(true);
   const [error, setError] = useState('');
+  const [refreshKey, setRefreshKey] = useState(0);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [selectedBranch, setSelectedBranch] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -151,7 +152,7 @@ export default function Dashboard() {
     };
     
     fetchInitialData();
-  }, [selectedBranch]);
+  }, [selectedBranch, refreshKey]);
 
   useEffect(() => {
     const fetchRecent = async () => {
@@ -334,7 +335,16 @@ export default function Dashboard() {
   if (error) {
     return (
       <div className="card p-6 text-center">
-        <p className="text-red-600">{error}</p>
+        <p className="text-red-600 mb-4">{error}</p>
+        <p className="text-gray-500 text-sm mb-4">
+          Esto puede deberse a una falla temporal de conexión. Intentá nuevamente.
+        </p>
+        <button
+          onClick={() => setRefreshKey((k) => k + 1)}
+          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+        >
+          Reintentar
+        </button>
       </div>
     );
   }

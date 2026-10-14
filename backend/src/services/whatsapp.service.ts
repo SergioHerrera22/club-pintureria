@@ -98,7 +98,7 @@ class WhatsAppService {
     }
   }
 
-  private formatPhoneNumber(phone: string): string | null {
+  formatPhoneNumber(phone: string): string | null {
     let cleaned = phone.replace(/\D/g, '');
     
     if (cleaned.startsWith('549')) {
