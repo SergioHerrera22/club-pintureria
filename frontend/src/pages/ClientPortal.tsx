@@ -245,10 +245,7 @@ export default function ClientPortal() {
             alt="Robles Club"
             className="w-36 h-36 sm:w-40 sm:h-40 rounded-3xl object-cover mx-auto mb-5 shadow-2xl shadow-primary-900/20 ring-4 ring-white"
           />
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
-            Robles <span className="text-primary-600">Club</span>
-          </h1>
-          <h2 className="mt-2 text-lg font-semibold text-gray-800">{titles[step].title}</h2>
+          <h2 className="text-lg font-semibold text-gray-800">{titles[step].title}</h2>
           <p className="mt-1 text-gray-500">{titles[step].subtitle}</p>
         </div>
 

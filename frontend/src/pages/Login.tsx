@@ -54,10 +54,7 @@ export default function Login() {
             alt="Robles Club"
             className="w-36 h-36 sm:w-40 sm:h-40 rounded-3xl object-cover mx-auto mb-5 shadow-2xl shadow-primary-900/20 ring-4 ring-white"
           />
-          <h1 className="text-3xl font-extrabold tracking-tight text-gray-900">
-            Robles <span className="text-primary-600">Club</span>
-          </h1>
-          <p className="mt-1.5 text-gray-500">Panel de personal · Iniciá sesión para continuar</p>
+          <p className="text-gray-500">Panel de personal · Iniciá sesión para continuar</p>
         </div>
 
         <div className="card p-6 sm:p-8 shadow-xl shadow-gray-900/5 border-white/80">
