@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber } from '../lib/utils';
-import { UserPlus, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { useAuthStore } from '../stores/authStore';
+import { UserPlus, Loader2, CheckCircle2, AlertCircle, Building } from 'lucide-react';
 
 const clientSchema = z.object({
   firstName: z.string().min(1, 'Requerido'),
@@ -28,9 +29,22 @@ interface CreatedClient {
 }
 
 export default function ClientRegister() {
+  const { user } = useAuthStore();
+  const isAdmin = user?.role === 'ADMIN';
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [created, setCreated] = useState<CreatedClient | null>(null);
+  const [branches, setBranches] = useState<Array<{ id: string; name: string; code: string }>>([]);
+  const [branchId, setBranchId] = useState('');
+
+  // El admin elige a qué sucursal pertenece el cliente; cajera/vendedor
+  // se les asigna automáticamente la suya en el backend.
+  useEffect(() => {
+    if (!isAdmin) return;
+    api.get<{ branches: Array<{ id: string; name: string; code: string }> }>('/branches?isActive=true&limit=100')
+      .then((res) => setBranches(res.data.branches))
+      .catch(() => {/* sin sucursales: el backend crea al cliente sin asignar */});
+  }, [isAdmin]);
 
   const form = useForm<ClientForm>({
     resolver: zodResolver(clientSchema),
@@ -38,6 +52,10 @@ export default function ClientRegister() {
   });
 
   const onSubmit = async (data: ClientForm) => {
+    if (isAdmin && !branchId) {
+      setError('Seleccioná la sucursal del cliente');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -48,6 +66,7 @@ export default function ClientRegister() {
         phone: data.phone,
         birthDate: data.birthDate,
         email: data.email,
+        ...(isAdmin ? { branchId } : {}),
       };
       const response = await api.post<CreatedClient>('/clients', payload);
       setCreated(response.data);
@@ -143,6 +162,29 @@ export default function ClientRegister() {
             <input {...form.register('birthDate')} type="date" required max={new Date().toISOString().split('T')[0]} className={cn('input', form.formState.errors.birthDate && 'border-red-300')} />
             {form.formState.errors.birthDate && <p className="text-sm text-red-600 mt-1">{form.formState.errors.birthDate.message}</p>}
           </div>
+
+          {isAdmin ? (
+            <div>
+              <label className="label">Sucursal *</label>
+              <select
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+                required
+                className={cn('input', !branchId && error?.includes('sucursal') && 'border-red-300')}
+              >
+                <option value="">Seleccionar sucursal...</option>
+                {branches.map((b) => <option key={b.id} value={b.id}>{b.name} ({b.code})</option>)}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">El cliente va a ser visible para el personal de esa sucursal.</p>
+            </div>
+          ) : (
+            <p className="text-xs text-gray-500 flex items-center gap-1.5">
+              <Building className="w-3.5 h-3.5" />
+              {user?.branch
+                ? `El cliente se va a cargar en tu sucursal: ${user.branch.name}`
+                : 'Tu usuario no tiene sucursal asignada: avisale al administrador.'}
+            </p>
+          )}
 
           <p className="text-xs text-gray-400">* Todos los campos son obligatorios</p>
 

@@ -19,9 +19,14 @@ const userBranchFilter = (req: AuthRequest): { isGlobal: boolean; branchId: stri
   return { isGlobal: scope.isGlobal, branchId: scope.branchId };
 };
 
-/** Objeto de filtro Prisma para User según scope. */
+/** Objeto de filtro Prisma para User según scope.
+ * Los clientes sin sucursal (creados por un admin sin asignarla, o autogestionados
+ * desde el portal público) los ve todo el personal: son clientes "del club".
+ */
 const branchWhere = (scope: { isGlobal: boolean; branchId: string | null }): Prisma.UserWhereInput =>
-  scope.isGlobal ? {} : { branchId: scope.branchId };
+  scope.isGlobal
+    ? {}
+    : { OR: [{ branchId: scope.branchId }, { branchId: null }] };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
