@@ -160,7 +160,7 @@ export default function ClientPrizes() {
                 <p className="font-semibold">{data.nextGoal.name}</p>
               </div>
               {data.nextGoal.imageUrl && (
-                <img src={data.nextGoal.imageUrl} alt={data.nextGoal.name} className="w-14 h-14 rounded-lg object-cover bg-white/20" />
+                <img src={data.nextGoal.imageUrl} alt={data.nextGoal.name} className="w-14 h-14 rounded-lg object-contain bg-white/90 p-1" />
               )}
             </div>
             <div className="h-2 bg-white/20 rounded-full overflow-hidden mb-2">
@@ -214,7 +214,7 @@ export default function ClientPrizes() {
           <div className="bg-white rounded-t-2xl sm:rounded-2xl shadow-xl w-full sm:max-w-md max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
             <div className="relative">
               {selected.imageUrl ? (
-                <img src={selected.imageUrl} alt={selected.name} className="w-full h-48 object-cover rounded-t-2xl" />
+                <img src={selected.imageUrl} alt={selected.name} className="w-full aspect-[16/10] object-contain bg-gray-50 rounded-t-2xl p-3" />
               ) : (
                 <div className="w-full h-32 bg-amber-50 rounded-t-2xl flex items-center justify-center">
                   <Gift className="w-14 h-14 text-amber-300" />
@@ -300,9 +300,9 @@ function PrizeCard({ prize, currentPoints, onClick }: { prize: PrizeItem; curren
       onClick={onClick}
       className="bg-white rounded-xl border border-gray-200 overflow-hidden text-left transition-all hover:shadow-md hover:-translate-y-0.5"
     >
-      <div className="relative h-36 bg-gray-100">
+      <div className="relative aspect-[4/3] bg-gray-50">
         {prize.imageUrl ? (
-          <img src={prize.imageUrl} alt={prize.name} className="w-full h-full object-cover" loading="lazy" />
+          <img src={prize.imageUrl} alt={prize.name} className="w-full h-full object-contain p-2" loading="lazy" />
         ) : (
           <div className="w-full h-full flex items-center justify-center">
             <Gift className="w-10 h-10 text-gray-300" />

@@ -125,6 +125,15 @@ export default function ClientPortal() {
       setError('Ingresá un teléfono válido');
       return;
     }
+    const email = regEmail.trim();
+    if (!email) {
+      setError('Ingresá tu email');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setError('Ingresá un email válido');
+      return;
+    }
     if (password.length < 6) {
       setError('La contraseña debe tener al menos 6 caracteres');
       return;
@@ -139,7 +148,7 @@ export default function ClientPortal() {
         firstName: regFirstName.trim(),
         lastName: regLastName.trim(),
         phone: regPhone.trim(),
-        email: regEmail.trim() || undefined,
+        email,
         password,
       });
       navigate('/app/home', { replace: true });
@@ -461,7 +470,7 @@ export default function ClientPortal() {
               </div>
 
               <div>
-                <label htmlFor="portal-reg-email" className="label">Email (opcional)</label>
+                <label htmlFor="portal-reg-email" className="label">Email *</label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
                   <input
@@ -472,6 +481,7 @@ export default function ClientPortal() {
                     value={regEmail}
                     onChange={(e) => setRegEmail(e.target.value)}
                     disabled={isLoading}
+                    required
                   />
                 </div>
               </div>

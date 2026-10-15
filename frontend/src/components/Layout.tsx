@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
-import logoUrl from '../assets/robles-logo.png';
+import logoUrl from '../assets/RC.svg';
 // @ts-ignore
 import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle } from 'lucide-react';
 import { useState } from 'react';
@@ -50,8 +50,8 @@ export default function Layout() {
         )}
         aria-label="Sidebar"
       >
-        <div className="flex h-16 items-center justify-between px-6 border-b border-gray-200 lg:justify-center">
-          <img src={logoUrl} alt="Robles Club" className="w-10 h-10 rounded-xl object-cover" />
+        <div className="flex items-center justify-between px-6 py-5 border-b border-gray-200 lg:justify-center">
+          <img src={logoUrl} alt="Robles Club" className="w-44 h-auto object-contain" />
           <button
             className="lg:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100"
             onClick={() => setSidebarOpen(false)}
@@ -129,7 +129,7 @@ export default function Layout() {
             >
               <Menu className="w-6 h-6" />
             </button>
-            <img src={logoUrl} alt="Robles Club" className="w-10 h-10 rounded-xl object-cover" />
+            <img src={logoUrl} alt="Robles Club" className="h-12 w-auto object-contain" />
             <div className="w-10" />
           </div>
         </header>

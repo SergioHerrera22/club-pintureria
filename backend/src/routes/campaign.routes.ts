@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as campaignController from '../controllers/campaign.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -20,7 +20,7 @@ const sendCampaignSchema = z.object({
   }),
 });
 
-router.post('/send', validate(sendCampaignSchema), campaignController.sendCampaign);
-router.post('/prepare', validate(sendCampaignSchema), campaignController.prepareCampaign);
+router.post('/send', requireMenuPermission('campanas'), validate(sendCampaignSchema), campaignController.sendCampaign);
+router.post('/prepare', requireMenuPermission('campanas'), validate(sendCampaignSchema), campaignController.prepareCampaign);
 
 export default router;

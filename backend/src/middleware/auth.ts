@@ -13,7 +13,17 @@ export interface AuthRequest extends Request {
     firstName: string;
     lastName: string;
     branchId: string | null;
+    /** Permisos de menú personalizados. null/undefined = usar los del rol. */
+    permissions: string[] | null;
   };
+}
+
+/**
+ * Normaliza el campo permissions que llega de Prisma (Json) a string[] | null.
+ */
+function normalizePermissions(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  return value.filter((p): p is string => typeof p === 'string');
 }
 
 export const NO_BRANCH = '__NO_BRANCH__';
@@ -85,7 +95,7 @@ export const authenticate = async (
     if (!user) {
       const dbUser = await prisma.user.findUnique({
         where: { id: decoded.id },
-        select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true },
+        select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true, permissions: true },
       });
       
       if (!dbUser || !dbUser.isActive) {
@@ -93,7 +103,7 @@ export const authenticate = async (
         return;
       }
       
-      user = dbUser;
+      user = { ...dbUser, permissions: normalizePermissions(dbUser.permissions) };
       setCachedUser(decoded.id, user);
     }
     
@@ -140,6 +150,76 @@ export const authorize = (...allowedRoles: UserRole[]) => {
   };
 };
 
+/**
+ * Indica si el usuario tiene habilitada una sección del menú.
+ * - ADMIN: siempre true (no se puede bloquear para no perder acceso al panel).
+ * - Sin permisos personalizados (permissions null): true (usa los defaults del rol).
+ * - Con permisos personalizados: true solo si la clave está en la lista.
+ */
+export const hasMenuPermission = (
+  user?: AuthRequest['user'],
+  ...keys: string[]
+): boolean => {
+  if (!user) return false;
+  if (user.role === UserRole.ADMIN) return true;
+  const permissions = user.permissions;
+  if (!Array.isArray(permissions)) return true;
+  return keys.some((k) => permissions.includes(k));
+};
+
+/**
+ * Bloquea la acción si el usuario tiene permisos personalizados y ninguno
+ * de las claves indicadas está habilitado. ADMIN y usuarios sin
+ * personalización pasan siempre.
+ */
+export const requireMenuPermission = (...keys: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: 'No autenticado' });
+      return;
+    }
+    if (hasMenuPermission(req.user, ...keys)) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: 'No tenés permiso para realizar esta acción' });
+  };
+};
+
+/**
+ * Variante para módulos donde las lecturas (GET) se usan desde varias
+ * pantallas: solo exige el permiso para métodos de escritura.
+ */
+export const requireMenuPermissionForWrite = (...keys: string[]) => {
+  const check = requireMenuPermission(...keys);
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') {
+      next();
+      return;
+    }
+    check(req, res, next);
+  };
+};
+
+/**
+ * Para rutas públicas/semi-públicas (ej. POST /auth/register con optionalAuth):
+ * si el que llama es un empleado autenticado con permisos personalizados,
+ * exige que alguna de las claves esté habilitada. Los anónimos pasan.
+ */
+export const requireStaffMenuPermission = (...keys: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      next();
+      return;
+    }
+    if (hasMenuPermission(req.user, ...keys)) {
+      next();
+      return;
+    }
+    res.status(403).json({ error: 'No tenés permiso para realizar esta acción' });
+  };
+};
+
 export const optionalAuth = async (
   req: AuthRequest,
   res: Response,
@@ -163,11 +243,11 @@ export const optionalAuth = async (
     
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true },
+      select: { id: true, email: true, role: true, dni: true, firstName: true, lastName: true, isActive: true, branchId: true, permissions: true },
     });
     
     if (user && user.isActive) {
-      req.user = user;
+      req.user = { ...user, permissions: normalizePermissions(user.permissions) };
     }
     
     next();

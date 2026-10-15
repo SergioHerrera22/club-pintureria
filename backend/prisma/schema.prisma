@@ -21,6 +21,9 @@ model User {
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   branchId            String?
+  /// Permisos de menú personalizados. null = usar permisos por defecto del rol.
+  /// Si es un array, solo esas secciones del menú están habilitadas (ADMIN siempre tiene acceso total).
+  permissions         Json?
   challengeProgress   ChallengeProgress[]
   clientProfile       ClientProfile?
   coupons             Coupon[]

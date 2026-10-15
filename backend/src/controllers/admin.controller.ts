@@ -58,6 +58,7 @@ export const getUsers = async (req: AuthRequest, res: Response, next: NextFuncti
         createdAt: u.createdAt,
         clientProfile: u.clientProfile,
         branch: u.branch,
+        permissions: Array.isArray(u.permissions) ? u.permissions : null,
       })),
       pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
     });
@@ -97,6 +98,7 @@ export const getUserById = async (req: AuthRequest, res: Response, next: NextFun
       createdAt: user.createdAt,
       clientProfile: user.clientProfile,
       branch: user.branch,
+      permissions: Array.isArray(user.permissions) ? user.permissions : null,
       recentTransactions: recentTransactions.map(t => ({
         id: t.id,
         type: t.type,
@@ -165,7 +167,7 @@ export const createUser = async (req: AuthRequest, res: Response, next: NextFunc
 export const updateUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { firstName, lastName, phone, birthDate, role, isActive, branchId, confirmationKey } = req.body;
+    const { firstName, lastName, phone, birthDate, role, isActive, branchId, permissions, confirmationKey } = req.body;
     
     // Cajeras y vendedores deben pertenecer a una sucursal
     const targetUser = await prisma.user.findUnique({ where: { id } });
@@ -188,6 +190,19 @@ export const updateUser = async (req: AuthRequest, res: Response, next: NextFunc
       if (!branch) throw new AppError(404, 'Sucursal no encontrada');
     }
     
+    // Los administradores siempre tienen acceso total: se ignoran los permisos personalizados.
+    // - Body sin `permissions` (undefined) → no se toca lo guardado.
+    // - `permissions: null` → vuelve a los permisos por defecto del rol.
+    // - `permissions: [...]` → se guardan solo claves válidas.
+    let permissionsUpdate: Prisma.InputJsonValue | typeof Prisma.JsonNull | undefined = undefined;
+    if (effectiveRole === UserRole.ADMIN) {
+      permissionsUpdate = Prisma.JsonNull;
+    } else if (Array.isArray(permissions)) {
+      permissionsUpdate = permissions.filter((p: unknown): p is string => typeof p === 'string');
+    } else if (permissions === null) {
+      permissionsUpdate = Prisma.JsonNull;
+    }
+    
     const user = await prisma.user.update({
       where: { id },
       data: { 
@@ -198,11 +213,12 @@ export const updateUser = async (req: AuthRequest, res: Response, next: NextFunc
         role, 
         isActive,
         branchId: normalizedBranchId !== undefined ? normalizedBranchId : undefined,
+        permissions: permissionsUpdate,
       },
       include: { branch: true },
     });
     
-    res.json({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, dni: user.dni, role: user.role, isActive: user.isActive, branch: user.branch });
+    res.json({ id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, dni: user.dni, role: user.role, isActive: user.isActive, branch: user.branch, permissions: Array.isArray(user.permissions) ? user.permissions : null });
   } catch (error) {
     next(error);
   }

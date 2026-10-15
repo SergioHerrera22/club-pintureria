@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
-import { PromotionService } from '../services/promotion.service';
 import { CouponService } from '../services/coupon.service';
 import { ChallengeService } from '../services/challenge.service';
 import { PurchaseService } from '../services/purchase.service';
@@ -41,14 +40,16 @@ router.get('/home', async (req, res, next) => {
     // paralelo para evitar sumar la latencia de red de la base de datos
     // en cada paso (con DB remota esto era la principal causa de lentitud).
     const [promotions, challenges, coupons, recentPurchases, expiringCoupons, benefits] = await Promise.all([
-      // Promociones activas para el cliente
-      PromotionService.getActivePromotionsForClient(
-        [],
-        0,
-        [],
-        [],
-        []
-      ),
+      // Promociones vigentes (se muestran todas en el carrusel del inicio)
+      prisma.promotion.findMany({
+        where: {
+          isActive: true,
+          startDate: { lte: new Date() },
+          endDate: { gte: new Date() },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
 
       // Desafíos activos
       ChallengeService.getClientChallenges(user.id),
@@ -107,19 +108,22 @@ router.get('/home', async (req, res, next) => {
         availableCoupons: coupons.coupons.length,
         expiringCoupons: expiringCoupons.length,
       },
-      promotions: promotions.slice(0, 3).map(p => ({
-        id: p.promotion.id,
-        name: p.promotion.name,
-        type: p.promotion.type,
-        multiplier: p.promotion.multiplier,
-        bonusPoints: p.promotion.bonusPoints,
-        discount: p.promotion.discount,
-        endDate: p.promotion.endDate,
+      promotions: promotions.map(p => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        imageUrl: p.imageUrl,
+        type: p.type,
+        multiplier: p.multiplier,
+        bonusPoints: p.bonusPoints,
+        discount: p.discount,
+        endDate: p.endDate,
       })),
       challenges: challenges.slice(0, 3).map(c => ({
         id: c.id,
         name: c.name,
         description: c.description,
+        imageUrl: c.imageUrl,
         type: c.type,
         target: c.target,
         progress: c.progress?.currentValue || 0,

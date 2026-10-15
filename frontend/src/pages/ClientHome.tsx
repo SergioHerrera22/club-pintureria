@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import ClientHeader from '../components/ClientHeader';
+import PromotionCarousel from '../components/PromotionCarousel';
 
 interface NextGoal {
   id: string;
@@ -42,6 +43,8 @@ interface HomeData {
   promotions: Array<{
     id: string;
     name: string;
+    description?: string;
+    imageUrl?: string | null;
     type: string;
     multiplier: number;
     bonusPoints: number;
@@ -52,6 +55,7 @@ interface HomeData {
     id: string;
     name: string;
     description: string;
+    imageUrl?: string | null;
     type: string;
     target: number;
     progress: number;
@@ -335,11 +339,7 @@ export default function ClientHome() {
               <SectionHeader title="Promociones Activas" link="/app/promotions" icon={Sparkles} />
             )}
             {promotions.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {promotions.map((promo) => (
-                  <PromotionCard key={promo.id} promo={promo} />
-                ))}
-              </div>
+              <PromotionCarousel promotions={promotions} />
             )}
 
             {challenges.length > 0 && (
@@ -458,62 +458,12 @@ function StatCard({ icon: Icon, label, value, color, link }: StatCardProps) {
   );
 }
 
-interface PromotionCardProps {
-  promo: {
-    id: string;
-    name: string;
-    type: string;
-    multiplier: number;
-    bonusPoints: number;
-    discount: number;
-    endDate: string;
-  };
-}
-
-function PromotionCard({ promo }: PromotionCardProps) {
-  const Icon = typeIcons[promo.type] || Sparkles;
-  const color = typeColors[promo.type] || 'bg-gray-500';
-  
-  return (
-    <div className="p-4 bg-white rounded-xl border border-gray-200 hover:shadow-md transition-shadow">
-      <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className={cn('p-2 rounded-lg', color)}>
-            <Icon className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-gray-900">{promo.name}</h3>
-            <p className="text-xs text-gray-500">{typeLabels[promo.type] || promo.type}</p>
-          </div>
-        </div>
-        <span className="text-xs text-gray-400">Hasta {new Date(promo.endDate).toLocaleDateString('es-AR')}</span>
-      </div>
-      <div className="flex items-center gap-2 text-sm">
-        {promo.multiplier > 1 && (
-          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full">
-            <Zap className="w-3 h-3 inline mr-1" /> x{promo.multiplier}
-          </span>
-        )}
-        {promo.bonusPoints > 0 && (
-          <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded-full">
-            <Award className="w-3 h-3 inline mr-1" /> +{promo.bonusPoints}
-          </span>
-        )}
-        {promo.discount > 0 && (
-          <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full">
-            <Sparkles className="w-3 h-3 inline mr-1" /> -{promo.discount}%
-          </span>
-        )}
-      </div>
-    </div>
-  );
-}
-
 interface ChallengeCardProps {
   challenge: {
     id: string;
     name: string;
     description: string;
+    imageUrl?: string | null;
     type: string;
     target: number;
     progress: number;
@@ -526,7 +476,13 @@ function ChallengeCard({ challenge }: ChallengeCardProps) {
   const progressPercent = Math.min(100, (challenge.progress / challenge.target) * 100);
   
   return (
-    <div className={cn('p-4 bg-white rounded-xl border border-gray-200', challenge.completed && 'bg-green-50 border-green-200')}>
+    <div className={cn('bg-white rounded-xl border border-gray-200 overflow-hidden', challenge.completed && 'bg-green-50 border-green-200')}>
+      {challenge.imageUrl && (
+        <div className="aspect-[16/9] bg-gray-50 border-b border-gray-100 p-2">
+          <img src={challenge.imageUrl} alt={challenge.name} className="w-full h-full object-contain" loading="lazy" />
+        </div>
+      )}
+      <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-100 rounded-lg">
@@ -552,6 +508,7 @@ function ChallengeCard({ challenge }: ChallengeCardProps) {
       </div>
       <div className="flex items-center justify-between text-xs">
         <span className="text-gray-500">{challenge.progress} / {challenge.target}</span>
+      </div>
       </div>
     </div>
   );

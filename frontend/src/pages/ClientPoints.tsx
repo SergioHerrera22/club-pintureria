@@ -415,11 +415,11 @@ export default function ClientPoints() {
                           prize.canAfford ? 'border-gray-200 bg-white' : 'border-gray-200 bg-gray-50 opacity-75'
                         )}>
                           {prize.imageUrl && !isImageError(prize.id) && (
-                            <div className="relative h-40 mb-3 rounded-lg overflow-hidden bg-gray-100">
+                            <div className="relative aspect-[4/3] mb-3 rounded-lg overflow-hidden bg-gray-50">
                               <img
                                 src={prize.imageUrl}
                                 alt={prize.name}
-                                className={cn('w-full h-full object-cover transition-opacity duration-300', isImageLoaded(prize.id) ? 'opacity-100' : 'opacity-0')}
+                                className={cn('w-full h-full object-contain p-2 transition-opacity duration-300', isImageLoaded(prize.id) ? 'opacity-100' : 'opacity-0')}
                                 onLoad={() => handleImageLoad(prize.id)}
                                 onError={() => handleImageError(prize.id)}
                               />
@@ -431,7 +431,7 @@ export default function ClientPoints() {
                             </div>
                           )}
                           {(isImageError(prize.id) || !prize.imageUrl) && (
-                            <div className="relative h-40 mb-3 rounded-lg flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200">
+                            <div className="relative aspect-[4/3] mb-3 rounded-lg flex items-center justify-center bg-gradient-to-br from-primary-100 to-primary-200">
                               <Gift className="w-12 h-12 text-primary-300" />
                             </div>
                           )}

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as purchaseController from '../controllers/purchase.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -22,7 +22,7 @@ const createPurchaseValidation = z.object({
   }),
 });
 
-router.post('/', authenticate, authorize('CAJERA', 'ADMIN'), validate(createPurchaseValidation), purchaseController.createPurchase);
+router.post('/', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(createPurchaseValidation), purchaseController.createPurchase);
 router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), purchaseController.getPurchases);
 router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), purchaseController.getPurchaseById);
 router.post('/:id/cancel', authenticate, authorize('ADMIN'), purchaseController.cancelPurchase);

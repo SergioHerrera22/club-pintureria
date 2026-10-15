@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ClientHeader from '../components/ClientHeader';
+import PromotionCarousel from '../components/PromotionCarousel';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
@@ -66,7 +67,7 @@ export default function ClientPromotions() {
   const fetchPromotions = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/client/promotions');
+      const response = await api.get('/client/promotions', { params: { limit: 100 } });
       setPromotions(response.data.promotions);
     } catch (err: any) {
       if (err.response?.status === 401) {
@@ -172,11 +173,7 @@ export default function ClientPromotions() {
                   <Zap className="w-5 h-5 text-purple-600" />
                   Promociones Activas ({activePromotions.length})
                 </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {activePromotions.map((promo) => (
-                    <PromotionCard key={promo.id} promo={promo} />
-                  ))}
-                </div>
+                <PromotionCarousel promotions={activePromotions} />
               </div>
             )}
 
@@ -215,6 +212,11 @@ function PromotionCard({ promo, expired }: PromotionCardProps) {
       {!expired && daysLeft <= 7 && (
         <div className="bg-amber-50 border-b border-amber-200 px-4 py-1">
           <span className="text-xs text-amber-700 font-medium">Vence en {daysLeft} día{daysLeft !== 1 ? 's' : ''}</span>
+        </div>
+      )}
+      {promo.imageUrl && (
+        <div className="aspect-[16/9] bg-gray-50 border-b border-gray-100 p-2">
+          <img src={promo.imageUrl} alt={promo.name} className="w-full h-full object-contain" loading="lazy" />
         </div>
       )}
       <div className={cn('p-4', expired && 'bg-gray-50')}>

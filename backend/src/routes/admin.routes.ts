@@ -27,6 +27,26 @@ const createUserSchema = z.object({
 
 router.post('/users', validate(createUserSchema), adminController.createUser);
 
+const PERMISSION_KEYS = [
+  'dashboard',
+  'nuevo-cliente',
+  'clientes',
+  'ventas',
+  'usuarios',
+  'campanas',
+  'productos',
+  'reglas-puntos',
+  'premios',
+  'sucursales',
+  'marcas',
+  'categorias',
+  'promociones',
+  'cupones',
+  'desafios',
+  'beneficios',
+  'configuracion',
+] as const;
+
 const updateUserSchema = z.object({
   body: z.object({
     firstName: z.string().optional(),
@@ -36,6 +56,7 @@ const updateUserSchema = z.object({
     role: z.enum(['ADMIN', 'CAJERA', 'VENDEDOR', 'CLIENTE']).optional(),
     isActive: z.boolean().optional(),
     branchId: z.string().optional().nullable(),
+    permissions: z.array(z.enum(PERMISSION_KEYS)).nullable().optional(),
     confirmationKey: z.string().optional(),
   }),
   params: z.object({ id: z.string() }),

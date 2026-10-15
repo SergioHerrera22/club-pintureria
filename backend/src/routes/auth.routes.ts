@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as authController from '../controllers/auth.controller';
-import { authenticate, optionalAuth } from '../middleware/auth';
+import { authenticate, optionalAuth, requireStaffMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -39,7 +39,9 @@ const changePasswordSchema = z.object({
   }),
 });
 
-router.post('/register', optionalAuth, validate(registerSchema), authController.register);
+// Alta de clientes: público, pero si la hace un empleado con permisos
+// personalizados, exige que tenga habilitada la carga de clientes.
+router.post('/register', optionalAuth, requireStaffMenuPermission('clientes', 'nuevo-cliente'), validate(registerSchema), authController.register);
 router.post('/login', validate(loginSchema), authController.login);
 router.post('/refresh', validate(refreshSchema), authController.refreshToken);
 router.post('/logout', authenticate, authController.logout);

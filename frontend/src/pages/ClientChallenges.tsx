@@ -241,7 +241,13 @@ function ChallengeCard({ challenge, completed }: ChallengeCardProps) {
   const Icon = typeIcons[challenge.type] || Trophy;
   
   return (
-    <div className={cn('p-4 bg-white rounded-xl border border-gray-200', challenge.completed && 'bg-green-50 border-green-200', completed && 'bg-green-50 border-green-200')}>
+    <div className={cn('bg-white rounded-xl border border-gray-200 overflow-hidden', challenge.completed && 'bg-green-50 border-green-200', completed && 'bg-green-50 border-green-200')}>
+      {challenge.imageUrl && (
+        <div className="aspect-[16/9] bg-gray-50 border-b border-gray-100 p-2">
+          <img src={challenge.imageUrl} alt={challenge.name} className="w-full h-full object-contain" loading="lazy" />
+        </div>
+      )}
+      <div className="p-4">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <div className="p-2 bg-amber-100 rounded-lg">
@@ -279,6 +285,7 @@ function ChallengeCard({ challenge, completed }: ChallengeCardProps) {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as clientController from '../controllers/client.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -21,14 +21,14 @@ const createClientSchema = z.object({
 });
 
 // Alta de nuevos clientes: Admin, Cajera y Vendedor
-router.post('/', authenticate, authorize('ADMIN', 'CAJERA', 'VENDEDOR'), validate(createClientSchema), clientController.createClient);
+router.post('/', authenticate, authorize('ADMIN', 'CAJERA', 'VENDEDOR'), requireMenuPermission('clientes', 'nuevo-cliente'), validate(createClientSchema), clientController.createClient);
 
 router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), clientController.getClientDetail);
 router.get('/dni/:dni', authenticate, authorize('CAJERA', 'ADMIN'), clientController.findClientByDni);
 router.get('/dni/:dni/points', clientController.getClientPoints);
 router.get('/dni/:dni/history', authenticate, authorize('CAJERA', 'ADMIN'), clientController.getClientHistory);
 
-router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN'), validate(z.object({
+router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('clientes'), validate(z.object({
   body: z.object({
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
@@ -74,7 +74,7 @@ const quickPurchaseSchema = z.object({
   }),
 });
 
-router.post('/purchase', authenticate, authorize('CAJERA', 'ADMIN'), validate(purchaseSchema), clientController.registerPurchase);
-router.post('/quick-purchase', authenticate, authorize('CAJERA', 'ADMIN'), validate(quickPurchaseSchema), clientController.registerQuickPurchase);
+router.post('/purchase', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(purchaseSchema), clientController.registerPurchase);
+router.post('/quick-purchase', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(quickPurchaseSchema), clientController.registerQuickPurchase);
 
 export default router;

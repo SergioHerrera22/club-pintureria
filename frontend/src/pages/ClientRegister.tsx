@@ -10,9 +10,9 @@ const clientSchema = z.object({
   firstName: z.string().min(1, 'Requerido'),
   lastName: z.string().min(1, 'Requerido'),
   dni: z.string().min(7, 'DNI debe tener al menos 7 dígitos').max(8, 'DNI inválido'),
-  email: z.string().email('Email inválido').optional().or(z.literal('')),
-  phone: z.string().optional(),
-  birthDate: z.string().optional(),
+  email: z.string().min(1, 'Requerido').email('Email inválido'),
+  phone: z.string().min(6, 'Teléfono requerido (mínimo 6 dígitos)'),
+  birthDate: z.string().min(1, 'Requerido'),
 });
 
 type ClientForm = z.infer<typeof clientSchema>;
@@ -45,9 +45,9 @@ export default function ClientRegister() {
         firstName: data.firstName,
         lastName: data.lastName,
         dni: data.dni.replace(/[.\-\s]/g, ''),
-        phone: data.phone || undefined,
-        birthDate: data.birthDate || undefined,
-        email: data.email ? data.email : undefined,
+        phone: data.phone,
+        birthDate: data.birthDate,
+        email: data.email,
       };
       const response = await api.post<CreatedClient>('/clients', payload);
       setCreated(response.data);
@@ -108,39 +108,43 @@ export default function ClientRegister() {
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label">Nombre</label>
-              <input {...form.register('firstName')} className={cn('input', form.formState.errors.firstName && 'border-red-300')} />
+              <label className="label">Nombre *</label>
+              <input {...form.register('firstName')} required className={cn('input', form.formState.errors.firstName && 'border-red-300')} />
               {form.formState.errors.firstName && <p className="text-sm text-red-600 mt-1">{form.formState.errors.firstName.message}</p>}
             </div>
             <div>
-              <label className="label">Apellido</label>
-              <input {...form.register('lastName')} className={cn('input', form.formState.errors.lastName && 'border-red-300')} />
+              <label className="label">Apellido *</label>
+              <input {...form.register('lastName')} required className={cn('input', form.formState.errors.lastName && 'border-red-300')} />
               {form.formState.errors.lastName && <p className="text-sm text-red-600 mt-1">{form.formState.errors.lastName.message}</p>}
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="label">DNI</label>
-              <input {...form.register('dni')} inputMode="numeric" className={cn('input', form.formState.errors.dni && 'border-red-300')} />
+              <label className="label">DNI *</label>
+              <input {...form.register('dni')} inputMode="numeric" required minLength={7} maxLength={8} className={cn('input', form.formState.errors.dni && 'border-red-300')} />
               {form.formState.errors.dni && <p className="text-sm text-red-600 mt-1">{form.formState.errors.dni.message}</p>}
             </div>
             <div>
-              <label className="label">Teléfono (WhatsApp)</label>
-              <input {...form.register('phone')} inputMode="tel" placeholder="Ej: 1155551234" className="input" />
+              <label className="label">Teléfono (WhatsApp) *</label>
+              <input {...form.register('phone')} inputMode="tel" type="tel" required placeholder="Ej: 1155551234" className={cn('input', form.formState.errors.phone && 'border-red-300')} />
+              {form.formState.errors.phone && <p className="text-sm text-red-600 mt-1">{form.formState.errors.phone.message}</p>}
             </div>
           </div>
 
           <div>
-            <label className="label">Email (opcional)</label>
-            <input {...form.register('email')} type="email" placeholder="cliente@email.com" className={cn('input', form.formState.errors.email && 'border-red-300')} />
+            <label className="label">Email *</label>
+            <input {...form.register('email')} type="email" required placeholder="cliente@email.com" className={cn('input', form.formState.errors.email && 'border-red-300')} />
             {form.formState.errors.email && <p className="text-sm text-red-600 mt-1">{form.formState.errors.email.message}</p>}
           </div>
 
           <div>
-            <label className="label">Fecha de Nacimiento (opcional)</label>
-            <input {...form.register('birthDate')} type="date" className="input" />
+            <label className="label">Fecha de Nacimiento *</label>
+            <input {...form.register('birthDate')} type="date" required max={new Date().toISOString().split('T')[0]} className={cn('input', form.formState.errors.birthDate && 'border-red-300')} />
+            {form.formState.errors.birthDate && <p className="text-sm text-red-600 mt-1">{form.formState.errors.birthDate.message}</p>}
           </div>
+
+          <p className="text-xs text-gray-400">* Todos los campos son obligatorios</p>
 
           {error && (
             <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">

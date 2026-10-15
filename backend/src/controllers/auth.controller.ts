@@ -121,6 +121,7 @@ export const login = async (req: Request, res: Response, next: NextFunction): Pr
         role: user.role,
         branchId: user.branchId,
         branch: user.branch,
+        permissions: Array.isArray(user.permissions) ? user.permissions : null,
       },
       accessToken,
       refreshToken,
@@ -187,6 +188,7 @@ export const getMe = async (req: AuthRequest, res: Response, next: NextFunction)
       branchId: user.branchId,
       branch: user.branch,
       clientProfile: user.clientProfile,
+      permissions: Array.isArray(user.permissions) ? user.permissions : null,
     });
   } catch (error) {
     next(error);
