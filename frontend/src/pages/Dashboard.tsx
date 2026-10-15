@@ -100,6 +100,9 @@ export default function Dashboard() {
   const [selectedCajera, setSelectedCajera] = useState('todas');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [branchSales, setBranchSales] = useState<BranchSale[]>([]);
+  // Para el gráfico de torta: las sucursales con facturación $0 generan sectores
+  // de ancho cero y sus etiquetas se superponen entre sí. Se excluyen.
+  const branchPieData = branchSales.filter((b) => Number(b.revenue) > 0);
   const [monthlySales, setMonthlySales] = useState<MonthlySale[]>([]);
   const [cashierSales, setCashierSales] = useState<CashierSale[]>([]);
   
@@ -458,13 +461,13 @@ export default function Dashboard() {
                 <span className="card-title">Distribución por Sucursal</span>
               </div>
               <div className="card-content" style={{ height: 'calc(100% - 56px)', padding: '0 16px 16px' }}>
-                {branchSales.length === 0 ? (
+                {branchPieData.length === 0 ? (
                   <div className="p-8 text-center text-gray-500">No hay ventas registradas para este filtro</div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
-                      <Pie data={branchSales} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="revenue" nameKey="name" label={({ name, percent }: { name?: string; percent?: number }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
-                        {branchSales.map((_entry, i) => (<Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}
+                      <Pie data={branchPieData} cx="50%" cy="50%" innerRadius={60} outerRadius={100} paddingAngle={2} dataKey="revenue" nameKey="name" label={({ name, percent }: { name?: string; percent?: number }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} labelLine={false}>
+                        {branchPieData.map((_entry, i) => (<Cell key={`cell-${i}`} fill={PIE_COLORS[i % PIE_COLORS.length]} />))}
                       </Pie>
                       <Tooltip formatter={(value: any) => [`$${value.toLocaleString()}`, 'Total']} />
                       <Legend />
