@@ -4,7 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatDateTime } from '../lib/utils';
-import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus, Building, ShieldAlert } from 'lucide-react';
+import { MENU_PERMISSION_OPTIONS, ROLE_DEFAULT_PERMISSIONS } from '../lib/permissions';
+import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus, Building, ShieldAlert, KeyRound, RotateCcw } from 'lucide-react';
 
 const createUserSchema = z.object({
   email: z.string().email('Email inválido'),
@@ -62,6 +63,8 @@ interface UserData {
     name: string;
     code: string;
   } | null;
+  /** Permisos de menú personalizados. null = usa los defaults de su rol */
+  permissions?: string[] | null;
 }
 
 interface Transaction {
@@ -112,11 +115,16 @@ function AdminUsers() {
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showAdminKeyModal, setShowAdminKeyModal] = useState(false);
+  const [showPermsModal, setShowPermsModal] = useState(false);
   const [adminKey, setAdminKey] = useState('');
   const [adminKeyError, setAdminKeyError] = useState('');
   const [pendingDeleteUser, setPendingDeleteUser] = useState<UserData | null>(null);
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [detailUser, setDetailUser] = useState<UserDetail | null>(null);
+  const [permsUser, setPermsUser] = useState<UserData | null>(null);
+  const [customPerms, setCustomPerms] = useState(false);
+  const [selectedPerms, setSelectedPerms] = useState<string[]>([]);
+  const [savingPerms, setSavingPerms] = useState(false);
   
   const [filters, setFilters] = useState({
     search: '',
@@ -298,6 +306,41 @@ function AdminUsers() {
     }
   };
 
+  // ===== Permisos de menú por usuario =====
+
+  const openPermissions = (userData: UserData) => {
+    setPermsUser(userData);
+    if (Array.isArray(userData.permissions)) {
+      setCustomPerms(true);
+      setSelectedPerms(userData.permissions);
+    } else {
+      setCustomPerms(false);
+      setSelectedPerms(ROLE_DEFAULT_PERMISSIONS[userData.role] || []);
+    }
+    setShowPermsModal(true);
+  };
+
+  const togglePerm = (key: string) => {
+    setSelectedPerms((prev) => (prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]));
+  };
+
+  const savePermissions = async () => {
+    if (!permsUser) return;
+    setSavingPerms(true);
+    setError('');
+    try {
+      await api.put(`/admin/users/${permsUser.id}`, { permissions: customPerms ? selectedPerms : null });
+      setShowPermsModal(false);
+      setPermsUser(null);
+      setSuccess(customPerms ? 'Permisos actualizados correctamente' : 'Permisos restaurados a los del rol');
+      fetchUsers();
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al guardar permisos');
+    } finally {
+      setSavingPerms(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -438,6 +481,11 @@ function AdminUsers() {
                           <span className={cn('badge', roleColors[user.role] || 'bg-gray-100 text-gray-800')}>
                             {roleLabels[user.role] || user.role}
                           </span>
+                          {Array.isArray(user.permissions) && (
+                            <span className="ml-1 inline-flex items-center gap-1 text-xs text-gray-500" title="Tiene accesos personalizados">
+                              <KeyRound className="w-3 h-3" />
+                            </span>
+                          )}
                         </td>
                         <td className="p-4 hidden md:table-cell">
                           {user.branch ? (
@@ -463,6 +511,15 @@ function AdminUsers() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
+                            {user.role !== 'ADMIN' && user.role !== 'CLIENTE' && (
+                              <button
+                                onClick={() => openPermissions(user)}
+                                className="p-2 text-gray-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                title="Permisos de acceso (secciones del menú)"
+                              >
+                                <KeyRound className="w-4 h-4" />
+                              </button>
+                            )}
                             <button
                               onClick={() => openEditUser(user)}
                               className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
@@ -732,6 +789,124 @@ function AdminUsers() {
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => { setShowAdminKeyModal(false); setPendingDeleteUser(null); }} className="btn-secondary flex-1">Cancelar</button>
                 <button type="button" onClick={confirmDeleteAdmin} className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium">Eliminar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Permissions Modal */}
+      {showPermsModal && permsUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                  <KeyRound className="w-5 h-5 text-purple-600" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Permisos de acceso</h2>
+                  <p className="text-sm text-gray-500">
+                    {permsUser.firstName} {permsUser.lastName} ·{' '}
+                    <span className={cn('badge', roleColors[permsUser.role] || 'bg-gray-100 text-gray-800')}>
+                      {roleLabels[permsUser.role] || permsUser.role}
+                    </span>
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => { setShowPermsModal(false); setPermsUser(null); }} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <label className="flex items-start gap-3 p-3 bg-gray-50 rounded-lg cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={customPerms}
+                  onChange={(e) => {
+                    setCustomPerms(e.target.checked);
+                    if (e.target.checked && selectedPerms.length === 0) {
+                      setSelectedPerms(ROLE_DEFAULT_PERMISSIONS[permsUser.role] || []);
+                    }
+                  }}
+                  className="mt-0.5 rounded"
+                />
+                <span>
+                  <span className="text-sm font-medium text-gray-900">Personalizar accesos para este usuario</span>
+                  <span className="block text-xs text-gray-500">
+                    {customPerms
+                      ? 'Marcá las secciones del menú que este usuario puede usar. El resto queda bloqueado también en el backend.'
+                      : `Sin personalización: ve las secciones según su rol (${roleLabels[permsUser.role] || permsUser.role}).`}
+                  </span>
+                </span>
+              </label>
+
+              <div className={cn('grid grid-cols-1 sm:grid-cols-2 gap-2', !customPerms && 'opacity-50 pointer-events-none')}>
+                {MENU_PERMISSION_OPTIONS.map((option) => {
+                  const isDefault = (ROLE_DEFAULT_PERMISSIONS[permsUser.role] || []).includes(option.key);
+                  const checked = selectedPerms.includes(option.key);
+                  return (
+                    <label
+                      key={option.key}
+                      className={cn(
+                        'flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors',
+                        checked ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => togglePerm(option.key)}
+                        className="mt-0.5 rounded"
+                      />
+                      <span className="min-w-0">
+                        <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                          {option.label}
+                          {isDefault && !checked && (
+                            <span className="text-[10px] uppercase tracking-wide text-gray-400">(por defecto)</span>
+                          )}
+                        </span>
+                        <span className="block text-xs text-gray-500 truncate">{option.description}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+
+              {customPerms && selectedPerms.length === 0 && (
+                <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  Si no seleccionás ninguna sección, el usuario no verá opciones en el menú (solo podrá editar su perfil).
+                </p>
+              )}
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <p className="text-xs text-gray-400">
+                Los cambios se aplican cuando el usuario actualiza la página o vuelve a iniciar sesión.
+              </p>
+
+              <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                {customPerms && (
+                  <button
+                    type="button"
+                    onClick={() => { setCustomPerms(false); setSelectedPerms(ROLE_DEFAULT_PERMISSIONS[permsUser.role] || []); }}
+                    className="btn-outline flex items-center justify-center gap-2 sm:mr-auto"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Restaurar por defecto
+                  </button>
+                )}
+                <button type="button" onClick={() => { setShowPermsModal(false); setPermsUser(null); }} className="btn-secondary flex-1">Cancelar</button>
+                <button
+                  type="button"
+                  onClick={savePermissions}
+                  disabled={savingPerms}
+                  className="btn-primary flex-1"
+                >
+                  {savingPerms ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Guardar Permisos'}
+                </button>
               </div>
             </div>
           </div>

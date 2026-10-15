@@ -2,6 +2,7 @@ import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore';
 import { useEffect } from 'react';
 import { getHomeForRole } from './lib/utils';
+import { hasMenuPermission, getHomeForUser } from './lib/permissions';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import ClientPortal from './pages/ClientPortal';
@@ -36,7 +37,7 @@ import AdminUsers from './pages/AdminUsers';
 import Campaigns from './pages/Campaigns';
 
 
-function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode; allowedRoles?: string[] }) {
+function ProtectedRoute({ children, allowedRoles, permission }: { children: React.ReactNode; allowedRoles?: string[]; permission?: string }) {
   const { isAuthenticated, user, refreshUser } = useAuthStore();
   
   useEffect(() => {
@@ -51,6 +52,12 @@ function ProtectedRoute({ children, allowedRoles }: { children: React.ReactNode;
   
   if (allowedRoles && user && !allowedRoles.includes(user.role)) {
     return <Navigate to={getHomeForRole(user.role)} replace />;
+  }
+  
+  // Permisos personalizados por usuario: si no tiene la sección habilitada,
+  // lo manda a la primera sección permitida (evita entrar por URL).
+  if (permission && user && !hasMenuPermission(user, permission)) {
+    return <Navigate to={getHomeForUser(user)} replace />;
   }
   
   return <>{children}</>;
@@ -91,30 +98,30 @@ function App() {
       
       {/* Admin/Cajera routes with Layout */}
       <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Layout /></ProtectedRoute>}>
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/clients" element={<Clients />} />
-        <Route path="/clients/:dni" element={<ClientDetail />} />
-        <Route path="/nuevo-cliente" element={<ClientRegister />} />
-        <Route path="/sales" element={<Sales />} />
-        <Route path="/campaigns" element={<Campaigns />} />
-        <Route path="/products" element={<ProtectedRoute allowedRoles={['ADMIN']}><Products /></ProtectedRoute>} />
-        <Route path="/point-rules" element={<ProtectedRoute allowedRoles={['ADMIN']}><PointRules /></ProtectedRoute>} />
-        <Route path="/prizes" element={<Prizes />} />
-        <Route path="/branches" element={<ProtectedRoute allowedRoles={['ADMIN']}><Branches /></ProtectedRoute>} />
-        <Route path="/brands" element={<ProtectedRoute allowedRoles={['ADMIN']}><Brands /></ProtectedRoute>} />
-        <Route path="/categories" element={<ProtectedRoute allowedRoles={['ADMIN']}><Categories /></ProtectedRoute>} />
-        <Route path="/promotions" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Promotions /></ProtectedRoute>} />
-        <Route path="/coupons" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Coupons /></ProtectedRoute>} />
-        <Route path="/challenges" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Challenges /></ProtectedRoute>} />
-        <Route path="/benefits" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Benefits /></ProtectedRoute>} />
-        <Route path="/system-config" element={<ProtectedRoute allowedRoles={['ADMIN']}><SystemConfig /></ProtectedRoute>} />
-        <Route path="/admin-users" element={<ProtectedRoute allowedRoles={['ADMIN']}><AdminUsers /></ProtectedRoute>} />
+        <Route path="/dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
+        <Route path="/clients" element={<ProtectedRoute permission="clientes"><Clients /></ProtectedRoute>} />
+        <Route path="/clients/:dni" element={<ProtectedRoute permission="clientes"><ClientDetail /></ProtectedRoute>} />
+        <Route path="/nuevo-cliente" element={<ProtectedRoute permission="nuevo-cliente"><ClientRegister /></ProtectedRoute>} />
+        <Route path="/sales" element={<ProtectedRoute permission="ventas"><Sales /></ProtectedRoute>} />
+        <Route path="/campaigns" element={<ProtectedRoute permission="campanas"><Campaigns /></ProtectedRoute>} />
+        <Route path="/products" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="productos"><Products /></ProtectedRoute>} />
+        <Route path="/point-rules" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="reglas-puntos"><PointRules /></ProtectedRoute>} />
+        <Route path="/prizes" element={<ProtectedRoute permission="premios"><Prizes /></ProtectedRoute>} />
+        <Route path="/branches" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="sucursales"><Branches /></ProtectedRoute>} />
+        <Route path="/brands" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="marcas"><Brands /></ProtectedRoute>} />
+        <Route path="/categories" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="categorias"><Categories /></ProtectedRoute>} />
+        <Route path="/promotions" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']} permission="promociones"><Promotions /></ProtectedRoute>} />
+        <Route path="/coupons" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']} permission="cupones"><Coupons /></ProtectedRoute>} />
+        <Route path="/challenges" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']} permission="desafios"><Challenges /></ProtectedRoute>} />
+        <Route path="/benefits" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']} permission="beneficios"><Benefits /></ProtectedRoute>} />
+        <Route path="/system-config" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="configuracion"><SystemConfig /></ProtectedRoute>} />
+        <Route path="/admin-users" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="usuarios"><AdminUsers /></ProtectedRoute>} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       
       {/* Vendedor routes: solo puede cargar nuevos clientes */}
       <Route element={<ProtectedRoute allowedRoles={['VENDEDOR']}><Layout /></ProtectedRoute>}>
-        <Route path="/vendedor/nuevo-cliente" element={<ClientRegister />} />
+        <Route path="/vendedor/nuevo-cliente" element={<ProtectedRoute permission="nuevo-cliente"><ClientRegister /></ProtectedRoute>} />
         <Route path="/profile" element={<Profile />} />
       </Route>
       

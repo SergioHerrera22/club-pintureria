@@ -17,6 +17,8 @@ export interface User {
   isActive?: boolean;
   branchId?: string | null;
   branch?: BranchInfo | null;
+  /** Permisos de menú personalizados. null/undefined = usa los defaults del rol */
+  permissions?: string[] | null;
   clientProfile?: ClientProfile;
   createdAt?: string;
 }

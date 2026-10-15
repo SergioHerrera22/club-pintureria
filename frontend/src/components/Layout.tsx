@@ -1,31 +1,36 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
+import { MENU_ITEMS, hasMenuPermission } from '../lib/permissions';
 import logoUrl from '../assets/RC.svg';
 // @ts-ignore
-import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle, type LucideIcon } from 'lucide-react';
 import { useState } from 'react';
 
-const navigation = [
-  { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Nuevo Cliente', href: '/nuevo-cliente', icon: UserPlus, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Nuevo Cliente', href: '/vendedor/nuevo-cliente', icon: UserPlus, roles: ['VENDEDOR'] },
-  { name: 'Clientes', href: '/clients', icon: Users, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Ventas', href: '/sales', icon: DollarSign, roles: ['CAJERA'] },
-  { name: 'Usuarios', href: '/admin-users', icon: UserCircle, roles: ['ADMIN'] },
-  { name: 'Campañas WhatsApp', href: '/campaigns', icon: MessageCircle, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Productos', href: '/products', icon: Package, roles: ['ADMIN'] },
-  { name: 'Reglas de Puntos', href: '/point-rules', icon: Settings, roles: ['ADMIN'] },
-  { name: 'Premios', href: '/prizes', icon: Tag, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Sucursales', href: '/branches', icon: Building, roles: ['ADMIN'] },
-  { name: 'Marcas', href: '/brands', icon: Tag, roles: ['ADMIN'] },
-  { name: 'Categorías', href: '/categories', icon: Layers, roles: ['ADMIN'] },
-  { name: 'Promociones', href: '/promotions', icon: Megaphone, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Cupones', href: '/coupons', icon: Ticket, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Desafíos', href: '/challenges', icon: Trophy, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Beneficios', href: '/benefits', icon: Gift, roles: ['ADMIN', 'CAJERA'] },
-  { name: 'Configuración', href: '/system-config', icon: Settings, roles: ['ADMIN'] },
-];
+const navIcons: Record<string, LucideIcon> = {
+  dashboard: LayoutDashboard,
+  'nuevo-cliente': UserPlus,
+  clientes: Users,
+  ventas: DollarSign,
+  usuarios: UserCircle,
+  campanas: MessageCircle,
+  productos: Package,
+  'reglas-puntos': Settings,
+  premios: Tag,
+  sucursales: Building,
+  marcas: Tag,
+  categorias: Layers,
+  promociones: Megaphone,
+  cupones: Ticket,
+  desafios: Trophy,
+  beneficios: Gift,
+  configuracion: Settings,
+};
+
+const navigation = MENU_ITEMS.map((item) => ({
+  ...item,
+  icon: navIcons[item.key] ?? User,
+}));
 
 export default function Layout() {
   const { user, logout } = useAuthStore();
@@ -37,8 +42,8 @@ export default function Layout() {
     navigate('/login');
   };
   
-  const filteredNav = navigation.filter(item => 
-    !item.roles || (user && item.roles.includes(user.role))
+  const filteredNav = navigation.filter(item =>
+    user && item.roles.includes(user.role) && hasMenuPermission(user, item.key)
   );
   
   return (
@@ -64,9 +69,9 @@ export default function Layout() {
         <nav className="mt-6 px-3 flex-1 overflow-y-auto" aria-label="Navegación principal">
           <ul className="space-y-1 pb-20" role="list">
             {filteredNav.map((item) => (
-              <li key={item.name}>
+              <li key={item.path}>
                 <NavLink
-                  to={item.href}
+                  to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={({ isActive }) =>
                     cn(
@@ -78,7 +83,7 @@ export default function Layout() {
                   }
                 >
                   <item.icon className="w-5 h-5" aria-hidden="true" />
-                  {item.name}
+                  {item.label}
                 </NavLink>
               </li>
             ))}
