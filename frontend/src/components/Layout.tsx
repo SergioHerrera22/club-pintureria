@@ -38,10 +38,25 @@ export default function Layout() {
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Refrescar permisos del usuario al cambiar de ruta para que los cambios
-  // realizados por el administrador se reflejen sin esperar el auto-refresh.
+  // Refrescar permisos del usuario al cambiar de ruta y al volver a la pestaña,
+  // para que los cambios realizados por el administrador se reflejen sin esperar
+  // el auto-refresh ni recargar la página.
   useEffect(() => {
     refreshUser();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        refreshUser();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleVisibilityChange);
+    };
   }, [refreshUser, location.pathname]);
 
   const handleLogout = () => {

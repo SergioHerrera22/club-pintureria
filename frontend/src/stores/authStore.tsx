@@ -86,8 +86,8 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          // Start auto-refresh after login
-          get().startAutoRefresh(60000);
+          // Start auto-refresh after login (10s para reflejar cambios de permisos/rol rápidamente)
+          get().startAutoRefresh(10_000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -101,7 +101,7 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          get().startAutoRefresh(60000);
+          get().startAutoRefresh(10_000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -117,7 +117,7 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          get().startAutoRefresh(60000);
+          get().startAutoRefresh(10_000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -131,7 +131,7 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          get().startAutoRefresh(60000);
+          get().startAutoRefresh(10_000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -145,7 +145,7 @@ export const useAuthStore = create<AuthState>()(
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });
-          get().startAutoRefresh(60000);
+          get().startAutoRefresh(10_000);
         } catch (error) {
           set({ isLoading: false });
           throw error;
@@ -235,7 +235,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   
   useEffect(() => {
     if (isAuthenticated) {
-      startAutoRefresh(60000);
+      startAutoRefresh(10_000);
     } else {
       stopAutoRefresh();
     }
