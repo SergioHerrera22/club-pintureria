@@ -6,7 +6,7 @@ import { authenticate, authorize, requireMenuPermission } from '../middleware/au
 
 const router = Router();
 
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), clientController.listClients);
+router.get('/', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), clientController.listClients);
 
 const createClientSchema = z.object({
   body: z.object({
@@ -23,12 +23,12 @@ const createClientSchema = z.object({
 // Alta de nuevos clientes: Admin, Cajera y Vendedor
 router.post('/', authenticate, authorize('ADMIN', 'CAJERA', 'VENDEDOR'), requireMenuPermission('clientes', 'nuevo-cliente'), validate(createClientSchema), clientController.createClient);
 
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), clientController.getClientDetail);
-router.get('/dni/:dni', authenticate, authorize('CAJERA', 'ADMIN'), clientController.findClientByDni);
+router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), clientController.getClientDetail);
+router.get('/dni/:dni', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), clientController.findClientByDni);
 router.get('/dni/:dni/points', clientController.getClientPoints);
-router.get('/dni/:dni/history', authenticate, authorize('CAJERA', 'ADMIN'), clientController.getClientHistory);
+router.get('/dni/:dni/history', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), clientController.getClientHistory);
 
-router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('clientes'), validate(z.object({
+router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), requireMenuPermission('clientes'), validate(z.object({
   body: z.object({
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),

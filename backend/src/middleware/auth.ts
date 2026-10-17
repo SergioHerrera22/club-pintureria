@@ -34,7 +34,7 @@ export const NO_BRANCH = '__NO_BRANCH__';
  * de conexiones cuando el frontend dispara varias requests en paralelo.
  * TTL de 15s: un usuario desactivado deja de pasar en ese plazo.
  */
-const USER_CACHE_TTL_MS = 15_000;
+const USER_CACHE_TTL_MS = 3_000;
 const userCache = new Map<string, { user: AuthRequest['user']; expiresAt: number }>();
 
 function getCachedUser(id: string) {

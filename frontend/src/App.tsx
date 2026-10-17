@@ -99,8 +99,6 @@ function App() {
       {/* Admin/Cajera routes with Layout */}
       <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
-        <Route path="/clients" element={<ProtectedRoute permission="clientes"><Clients /></ProtectedRoute>} />
-        <Route path="/clients/:dni" element={<ProtectedRoute permission="clientes"><ClientDetail /></ProtectedRoute>} />
         <Route path="/nuevo-cliente" element={<ProtectedRoute permission="nuevo-cliente"><ClientRegister /></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute permission="ventas"><Sales /></ProtectedRoute>} />
         <Route path="/campaigns" element={<ProtectedRoute permission="campanas"><Campaigns /></ProtectedRoute>} />
@@ -117,6 +115,12 @@ function App() {
         <Route path="/system-config" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="configuracion"><SystemConfig /></ProtectedRoute>} />
         <Route path="/admin-users" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="usuarios"><AdminUsers /></ProtectedRoute>} />
         <Route path="/profile" element={<Profile />} />
+      </Route>
+
+      {/* Clientes: accesible también para vendedores (solo lectura/edición de datos) */}
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA', 'VENDEDOR']}><Layout /></ProtectedRoute>}>
+        <Route path="/clients" element={<ProtectedRoute permission="clientes"><Clients /></ProtectedRoute>} />
+        <Route path="/clients/:dni" element={<ProtectedRoute permission="clientes"><ClientDetail /></ProtectedRoute>} />
       </Route>
       
       {/* Vendedor routes: solo puede cargar nuevos clientes */}

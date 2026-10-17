@@ -15,7 +15,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { key: 'dashboard', label: 'Dashboard', path: '/dashboard', roles: ['ADMIN', 'CAJERA'] },
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/nuevo-cliente', roles: ['ADMIN', 'CAJERA'] },
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/vendedor/nuevo-cliente', roles: ['VENDEDOR'] },
-  { key: 'clientes', label: 'Clientes', path: '/clients', roles: ['ADMIN', 'CAJERA'] },
+  { key: 'clientes', label: 'Clientes', path: '/clients', roles: ['ADMIN', 'CAJERA', 'VENDEDOR'] },
   { key: 'ventas', label: 'Ventas', path: '/sales', roles: ['CAJERA'] },
   { key: 'usuarios', label: 'Usuarios', path: '/admin-users', roles: ['ADMIN'] },
   { key: 'campanas', label: 'Campañas WhatsApp', path: '/campaigns', roles: ['ADMIN', 'CAJERA'] },
@@ -60,7 +60,7 @@ export const MENU_PERMISSION_OPTIONS: Array<MenuItem & { description: string }> 
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   ADMIN: MENU_PERMISSION_OPTIONS.map((o) => o.key),
   CAJERA: ['dashboard', 'nuevo-cliente', 'clientes', 'ventas', 'campanas', 'premios', 'promociones', 'cupones', 'desafios', 'beneficios'],
-  VENDEDOR: ['nuevo-cliente'],
+  VENDEDOR: ['nuevo-cliente', 'clientes'],
   CLIENTE: [],
 };
 

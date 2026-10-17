@@ -1,11 +1,11 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
 import { MENU_ITEMS, hasMenuPermission } from '../lib/permissions';
 import logoUrl from '../assets/RC.svg';
 // @ts-ignore
 import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle, type LucideIcon } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const navIcons: Record<string, LucideIcon> = {
   dashboard: LayoutDashboard,
@@ -33,10 +33,17 @@ const navigation = MENU_ITEMS.map((item) => ({
 }));
 
 export default function Layout() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, refreshUser } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  
+
+  // Refrescar permisos del usuario al cambiar de ruta para que los cambios
+  // realizados por el administrador se reflejen sin esperar el auto-refresh.
+  useEffect(() => {
+    refreshUser();
+  }, [refreshUser, location.pathname]);
+
   const handleLogout = () => {
     logout();
     navigate('/login');

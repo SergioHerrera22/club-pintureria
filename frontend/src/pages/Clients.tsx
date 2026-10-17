@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatDateTime } from '../lib/utils';
+import { useAuthStore } from '../stores/authStore';
 import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus, Clock, CheckCircle2, AlertTriangle } from 'lucide-react';
 
 const dniSchema = z.object({
@@ -109,6 +110,8 @@ interface ClientDetail extends ClientData {
 }
 
 function Clients() {
+  const { user } = useAuthStore();
+  const canDelete = user?.role === 'ADMIN';
   const [clients, setClients] = useState<ClientData[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
   const [loading, setLoading] = useState(false);
@@ -467,18 +470,20 @@ function Clients() {
                             >
                               <Edit className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => handleDeleteClient(client.id)}
-                              disabled={deletingId === client.id}
-                              className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                              title="Eliminar"
-                            >
+                            {canDelete && (
+                              <button
+                                onClick={() => handleDeleteClient(client.id)}
+                                disabled={deletingId === client.id}
+                                className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                title="Eliminar"
+                              >
                               {deletingId === client.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />
                               ) : (
                                 <Trash2 className="w-4 h-4" />
                               )}
                             </button>
+                            )}
                           </div>
                         </td>
                       </tr>
