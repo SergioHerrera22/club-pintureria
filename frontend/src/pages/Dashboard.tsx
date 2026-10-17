@@ -4,7 +4,8 @@ import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { DashboardStats } from '../types';
 import { cn, formatCurrency, formatNumber, formatDate } from '../lib/utils';
-import { Users, ShoppingCart, Award, TrendingUp, ArrowUpRight, ArrowDownRight, Plus, Receipt, Target, UserPlus } from 'lucide-react';
+import { Users, ShoppingCart, Award, TrendingUp, Plus, Receipt, Target, UserPlus } from 'lucide-react';
+
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
 
 const REPORT_TYPES = [
@@ -36,10 +37,10 @@ const formatMonthPeriod = (period: string): string => {
 };
 
 const statCards = [
-  { name: 'Clientes Activos', key: 'users.active', icon: Users, color: 'bg-blue-500', trend: { value: 12, label: 'vs mes anterior' } },
-  { name: 'Puntos en Circulación', key: 'points.inCirculation', icon: Award, color: 'bg-amber-500', format: 'number', trend: { value: 8, label: 'vs mes anterior' } },
-  { name: 'Ventas del Mes', key: 'sales.revenueThisMonth', icon: ShoppingCart, color: 'bg-green-500', format: 'currency', trend: { value: 15, label: 'vs mes anterior' } },
-  { name: 'Compras Hoy', key: 'sales.purchasesToday', icon: TrendingUp, color: 'bg-purple-500', trend: { value: -5, label: 'vs ayer' } },
+  { name: 'Clientes Activos', key: 'users.active', icon: Users, color: 'bg-blue-500' },
+  { name: 'Puntos en Circulación', key: 'points.inCirculation', icon: Award, color: 'bg-amber-500', format: 'number' },
+  { name: 'Ventas del Mes', key: 'sales.revenueThisMonth', icon: ShoppingCart, color: 'bg-green-500', format: 'currency' },
+  { name: 'Compras Hoy', key: 'sales.purchasesToday', icon: TrendingUp, color: 'bg-purple-500' },
 ];
 
 interface RecentPurchase {
@@ -120,10 +121,9 @@ export default function Dashboard() {
         const data = response.data;
         const branchList: Branch[] = Array.isArray(data) ? data : (data.branches || []);
         setBranches(branchList);
-        // Select first branch if none selected
-        if (!selectedBranch && branchList.length > 0) {
-          setSelectedBranch(branchList[0].id);
-        }
+        // NO se auto-selecciona la primera sucursal: por defecto se muestra
+        // "Todas las sucursales" (sin filtro) para que el dashboard refleje
+        // todos los datos. El backend fuerza la sucursal a cajeras/vendedores.
         } catch (err: any) {
         console.error('Error fetching branches:', err);
       }
@@ -596,8 +596,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {statCards.map((card) => {
           const value = getValue(stats, card.key) || 0;
-          const trend = card.trend;
-          
+
           return (
             <div key={card.name} className="card p-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 w-24 h-24 bg-gradient-to-br from-transparent to-current/10 rounded-full" style={{ backgroundImage: `linear-gradient(to bottom right, transparent, ${card.color.replace('500', '200')}33)` }} />
@@ -611,16 +610,6 @@ export default function Dashboard() {
                 <div className={cn('p-3 rounded-xl', card.color.replace('500', '100'))}>
                   <card.icon className={cn('w-6 h-6', card.color.replace('500', '600'))} />
                 </div>
-              </div>
-              <div className="mt-4 flex items-center gap-1 relative">
-                <span className={cn(
-                  'text-sm font-medium',
-                  trend.value >= 0 ? 'text-green-600' : 'text-red-600'
-                )}>
-                  {trend.value >= 0 ? <ArrowUpRight className="w-4 h-4" /> : <ArrowDownRight className="w-4 h-4" />}
-                  {Math.abs(trend.value)}%
-                </span>
-                <span className="text-sm text-gray-500">{trend.label}</span>
               </div>
             </div>
           );

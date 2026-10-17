@@ -23,7 +23,10 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
     const noData = !scope.isGlobal && branchId === NO_BRANCH;
     
     const purchaseWhere = branchId ? { status: 'COMPLETADA' as const, branchId } : { status: 'COMPLETADA' as const };
-    const userBranchWhere = branchId ? { branchId } : {};
+    // Clientes: al filtrar por sucursal se incluyen también los clientes sin
+    // sucursal asignada (clientes "del club"), igual que en el listado de clientes.
+    const userBranchWhere = branchId ? { OR: [{ branchId }, { branchId: null }] } : {};
+    const profileBranchWhere = branchId ? { user: { OR: [{ branchId }, { branchId: null }] } } : undefined;
     
     // Staff sin sucursal asignada: no ve datos de ninguna sucursal
     if (noData) {
@@ -54,11 +57,11 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       prisma.user.count({ where: { role: 'CLIENTE', createdAt: { gte: startOfMonth }, ...userBranchWhere } }),
       prisma.clientProfile.aggregate({ 
         _sum: { totalPointsEarned: true },
-        where: branchId ? { user: { branchId } } : undefined,
+        where: profileBranchWhere,
       }),
       prisma.clientProfile.aggregate({ 
         _sum: { totalPointsRedeemed: true },
-        where: branchId ? { user: { branchId } } : undefined,
+        where: profileBranchWhere,
       }),
       prisma.purchase.count({ where: { status: 'COMPLETADA', ...(branchId ? { branchId: branchId } : {}) } }),
       prisma.purchase.aggregate({
@@ -69,7 +72,7 @@ export const getDashboardStats = async (req: AuthRequest, res: Response, next: N
       prisma.clientProfile.findMany({
         take: 10,
         orderBy: { currentPoints: 'desc' },
-        where: branchId ? { user: { branchId } } : undefined,
+        where: profileBranchWhere,
         include: { user: { select: { firstName: true, lastName: true, dni: true } } },
       }),
       prisma.prize.findMany({
