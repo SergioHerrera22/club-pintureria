@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as challengeController from '../controllers/challenge.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -39,8 +39,8 @@ const updateChallengeValidation = z.object({
   params: z.object({ id: z.string() }),
 });
 
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), challengeController.getChallenges);
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), challengeController.getChallengeById);
+router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'desafios'), challengeController.getChallenges);
+router.get('/:id', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'desafios'), challengeController.getChallengeById);
 router.post('/', authenticate, authorize('ADMIN'), validate(challengeValidation), challengeController.createChallenge);
 router.put('/:id', authenticate, authorize('ADMIN'), validate(updateChallengeValidation), challengeController.updateChallenge);
 router.delete('/:id', authenticate, authorize('ADMIN'), challengeController.deleteChallenge);

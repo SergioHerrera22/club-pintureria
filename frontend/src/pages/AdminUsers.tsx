@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatDateTime } from '../lib/utils';
-import { MENU_PERMISSION_OPTIONS, ROLE_DEFAULT_PERMISSIONS } from '../lib/permissions';
+import { MENU_PERMISSION_OPTIONS, ROLE_DEFAULT_PERMISSIONS, ADMIN_ONLY_MENU_KEYS } from '../lib/permissions';
 import { Search, User, Loader2, History, Award, Edit, Trash2, Eye, X, ChevronLeft, ChevronRight, Plus, Building, ShieldAlert, KeyRound, RotateCcw } from 'lucide-react';
 
 const createUserSchema = z.object({
@@ -311,8 +311,12 @@ function AdminUsers() {
   const openPermissions = (userData: UserData) => {
     setPermsUser(userData);
     if (Array.isArray(userData.permissions)) {
+      // Las secciones solo-admin no aplican a usuarios no-admin: se descartan.
+      const isAdminTarget = userData.role === 'ADMIN';
       setCustomPerms(true);
-      setSelectedPerms(userData.permissions);
+      setSelectedPerms(
+        isAdminTarget ? userData.permissions : userData.permissions.filter((k) => !ADMIN_ONLY_MENU_KEYS.has(k))
+      );
     } else {
       setCustomPerms(false);
       setSelectedPerms(ROLE_DEFAULT_PERMISSIONS[userData.role] || []);
@@ -843,24 +847,32 @@ function AdminUsers() {
                 {MENU_PERMISSION_OPTIONS.map((option) => {
                   const isDefault = (ROLE_DEFAULT_PERMISSIONS[permsUser.role] || []).includes(option.key);
                   const checked = selectedPerms.includes(option.key);
+                  const adminOnlyLock = permsUser.role !== 'ADMIN' && ADMIN_ONLY_MENU_KEYS.has(option.key);
                   return (
                     <label
                       key={option.key}
                       className={cn(
-                        'flex items-start gap-2 p-2.5 border rounded-lg cursor-pointer transition-colors',
-                        checked ? 'border-purple-300 bg-purple-50' : 'border-gray-200 hover:bg-gray-50'
+                        'flex items-start gap-2 p-2.5 border rounded-lg transition-colors',
+                        adminOnlyLock
+                          ? 'border-gray-100 bg-gray-50 opacity-60 cursor-not-allowed'
+                          : checked ? 'border-purple-300 bg-purple-50 cursor-pointer' : 'border-gray-200 hover:bg-gray-50 cursor-pointer'
                       )}
+                      title={adminOnlyLock ? 'Esta sección solo está disponible para administradores' : undefined}
                     >
                       <input
                         type="checkbox"
                         checked={checked}
+                        disabled={adminOnlyLock}
                         onChange={() => togglePerm(option.key)}
                         className="mt-0.5 rounded"
                       />
                       <span className="min-w-0">
                         <span className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
                           {option.label}
-                          {isDefault && !checked && (
+                          {adminOnlyLock && (
+                            <span className="badge b-gris" style={{ fontSize: '10px' }}>Solo admin</span>
+                          )}
+                          {isDefault && !checked && !adminOnlyLock && (
                             <span className="text-[10px] uppercase tracking-wide text-gray-400">(por defecto)</span>
                           )}
                         </span>
@@ -870,6 +882,13 @@ function AdminUsers() {
                   );
                 })}
               </div>
+
+              {customPerms && (
+                <p className="text-xs text-gray-400">
+                  Para vendedores y cajeras podés habilitar cualquier sección de nivel cajera (Clientes, Ventas, Dashboard,
+                  Campañas, etc.). Las marcadas "Solo admin" quedan reservadas para administradores.
+                </p>
+              )}
 
               {customPerms && selectedPerms.length === 0 && (
                 <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-3">

@@ -151,6 +151,42 @@ export const authorize = (...allowedRoles: UserRole[]) => {
 };
 
 /**
+ * Como authorize(), pero permite además el acceso a un usuario con
+ * permisos personalizados que incluyan alguna de las secciones indicadas.
+ * Así el admin puede otorgar a un vendedor acceso a secciones de nivel
+ * cajera (ej: Clientes, Ventas, Dashboard) sin cambiarle el rol.
+ * - El rol por defecto pasa siempre (luego requireMenuPermission puede
+ *   bloquear si tiene permisos personalizados que excluyen la sección).
+ * - CLIENTE nunca pasa por aquí.
+ */
+export const authorizeWithPermission = (allowedRoles: UserRole[], ...permissionKeys: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction): void => {
+    if (!req.user) {
+      res.status(401).json({ error: 'No autenticado' });
+      return;
+    }
+    
+    if (req.user.role === UserRole.CLIENTE) {
+      res.status(403).json({ error: 'No autorizado' });
+      return;
+    }
+    
+    if (allowedRoles.includes(req.user.role)) {
+      next();
+      return;
+    }
+    
+    const permissions = req.user.permissions;
+    if (Array.isArray(permissions) && permissionKeys.some((k) => permissions.includes(k))) {
+      next();
+      return;
+    }
+    
+    res.status(403).json({ error: 'No autorizado' });
+  };
+};
+
+/**
  * Indica si el usuario tiene habilitada una sección del menú.
  * - ADMIN: siempre true (no se puede bloquear para no perder acceso al panel).
  * - Sin permisos personalizados (permissions null): true (usa los defaults del rol).

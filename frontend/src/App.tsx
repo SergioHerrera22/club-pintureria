@@ -96,8 +96,10 @@ function App() {
       {/* Portal de clientes: alta y login autogestionados por DNI */}
       <Route path="/users" element={<PublicRoute><ClientPortal /></PublicRoute>} />
       
-      {/* Admin/Cajera routes with Layout */}
-      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA']}><Layout /></ProtectedRoute>}>
+      {/* Admin/Cajera/Vendedor routes with Layout.
+          Las rutas admin-only tienen su propio allowedRoles; el resto queda
+          gobernado por los permisos personalizados de cada usuario. */}
+      <Route element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA', 'VENDEDOR']}><Layout /></ProtectedRoute>}>
         <Route path="/dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
         <Route path="/nuevo-cliente" element={<ProtectedRoute permission="nuevo-cliente"><ClientRegister /></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute permission="ventas"><Sales /></ProtectedRoute>} />

@@ -65,10 +65,25 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
 };
 
 /**
+ * Secciones que solo el ADMIN puede usar, aunque alguien le cargue el permiso.
+ * Los permisos personalizados expanden al personal dentro de las secciones
+ * de nivel cajera; no elevan a nadie a funciones de administración.
+ */
+export const ADMIN_ONLY_MENU_KEYS = new Set([
+  'usuarios',
+  'productos',
+  'reglas-puntos',
+  'sucursales',
+  'marcas',
+  'categorias',
+  'configuracion',
+]);
+
+/**
  * Indica si un usuario puede ver una sección del menú.
  * - ADMIN: siempre (no se puede bloquear para no perder acceso al panel).
- * - Sin permisos personalizados: usa los defaults de su rol.
  * - Con permisos personalizados: solo las claves habilitadas.
+ * - Sin permisos personalizados: los defaults de su rol.
  */
 export function hasMenuPermission(
   user: { role: string; permissions?: string[] | null } | null | undefined,
@@ -76,8 +91,9 @@ export function hasMenuPermission(
 ): boolean {
   if (!user) return false;
   if (user.role === 'ADMIN') return true;
-  if (!Array.isArray(user.permissions)) return true;
-  return user.permissions.includes(key);
+  if (Array.isArray(user.permissions)) return user.permissions.includes(key);
+  const defaults = ROLE_DEFAULT_PERMISSIONS[user.role] || [];
+  return defaults.includes(key);
 }
 
 /**
@@ -88,8 +104,12 @@ export function hasMenuPermission(
 export function getHomeForUser(user?: { role: string; permissions?: string[] | null } | null): string {
   if (!user) return '/login';
   if (user.role === 'CLIENTE') return '/app/home';
+  const custom = Array.isArray(user.permissions);
   for (const item of MENU_ITEMS) {
-    if (!item.roles.includes(user.role)) continue;
+    // Con permisos personalizados el menú puede incluir secciones fuera del
+    // rol por defecto (salvo las solo-admin), así que no se filtra por roles.
+    if (!custom && !item.roles.includes(user.role)) continue;
+    if (custom && ADMIN_ONLY_MENU_KEYS.has(item.key)) continue;
     if (!hasMenuPermission(user, item.key)) continue;
     return item.path;
   }

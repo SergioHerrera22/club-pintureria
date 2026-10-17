@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as clientController from '../controllers/client.controller';
-import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -74,7 +74,7 @@ const quickPurchaseSchema = z.object({
   }),
 });
 
-router.post('/purchase', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(purchaseSchema), clientController.registerPurchase);
-router.post('/quick-purchase', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(quickPurchaseSchema), clientController.registerQuickPurchase);
+router.post('/purchase', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), requireMenuPermission('ventas'), validate(purchaseSchema), clientController.registerPurchase);
+router.post('/quick-purchase', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), requireMenuPermission('ventas'), validate(quickPurchaseSchema), clientController.registerQuickPurchase);
 
 export default router;

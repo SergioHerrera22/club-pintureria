@@ -1,7 +1,7 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore';
 import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
-import { MENU_ITEMS, hasMenuPermission } from '../lib/permissions';
+import { MENU_ITEMS, hasMenuPermission, ADMIN_ONLY_MENU_KEYS } from '../lib/permissions';
 import logoUrl from '../assets/RC.svg';
 // @ts-ignore
 import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle, type LucideIcon } from 'lucide-react';
@@ -64,9 +64,16 @@ export default function Layout() {
     navigate('/login');
   };
   
-  const filteredNav = navigation.filter(item =>
-    user && item.roles.includes(user.role) && hasMenuPermission(user, item.key)
-  );
+  const filteredNav = navigation.filter(item => {
+    if (!user) return false;
+    if (user.role === 'ADMIN') return true;
+    // Con permisos personalizados el menú muestra exactamente las secciones
+    // habilitadas (salvo las solo-admin), aunque no sean del rol por defecto.
+    if (Array.isArray(user.permissions)) {
+      return !ADMIN_ONLY_MENU_KEYS.has(item.key) && user.permissions.includes(item.key);
+    }
+    return item.roles.includes(user.role) && hasMenuPermission(user, item.key);
+  });
   
   return (
     <div className="min-h-screen bg-gray-50">

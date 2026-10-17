@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as couponController from '../controllers/coupon.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -53,8 +53,8 @@ const updateCouponValidation = z.object({
   params: z.object({ id: z.string() }),
 });
 
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), couponController.getCoupons);
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), couponController.getCouponById);
+router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'cupones'), couponController.getCoupons);
+router.get('/:id', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'cupones'), couponController.getCouponById);
 
 router.post('/', authenticate, authorize('ADMIN'), validate(createCouponValidation), couponController.createCoupon);
 router.post('/bulk', authenticate, authorize('ADMIN'), validate(bulkCouponValidation), couponController.createBulkCoupons);

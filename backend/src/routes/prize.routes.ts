@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as prizeController from '../controllers/prize.controller';
-import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -41,7 +41,7 @@ router.put('/:id', authenticate, authorize('ADMIN'), validate(z.object({
 
 router.delete('/:id', authenticate, authorize('ADMIN'), prizeController.deletePrize);
 
-router.post('/redeem', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('premios'), validate(z.object({
+router.post('/redeem', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'premios'), requireMenuPermission('premios'), validate(z.object({
   body: z.object({
     dni: z.string().min(7).max(8),
     prizeId: z.string(),

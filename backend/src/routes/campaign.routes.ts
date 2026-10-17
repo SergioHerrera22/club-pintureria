@@ -2,11 +2,11 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as campaignController from '../controllers/campaign.controller';
-import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
+import { authenticate, authorizeWithPermission, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
-router.use(authenticate, authorize('ADMIN', 'CAJERA'));
+router.use(authenticate, authorizeWithPermission(['ADMIN', 'CAJERA'], 'campanas'));
 
 router.get('/recipients', campaignController.getRecipients);
 router.get('/templates', campaignController.getTemplates);

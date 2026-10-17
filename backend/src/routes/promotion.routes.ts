@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as promotionController from '../controllers/promotion.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -45,8 +45,8 @@ const updatePromotionValidation = z.object({
   params: z.object({ id: z.string() }),
 });
 
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), promotionController.getPromotions);
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), promotionController.getPromotionById);
+router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'promociones'), promotionController.getPromotions);
+router.get('/:id', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'promociones'), promotionController.getPromotionById);
 
 router.post('/', authenticate, authorize('ADMIN'), validate(promotionValidation), promotionController.createPromotion);
 

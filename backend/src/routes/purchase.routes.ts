@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as purchaseController from '../controllers/purchase.controller';
-import { authenticate, authorize, requireMenuPermission } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission, requireMenuPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -22,9 +22,9 @@ const createPurchaseValidation = z.object({
   }),
 });
 
-router.post('/', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('ventas'), validate(createPurchaseValidation), purchaseController.createPurchase);
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), purchaseController.getPurchases);
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), purchaseController.getPurchaseById);
+router.post('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), requireMenuPermission('ventas'), validate(createPurchaseValidation), purchaseController.createPurchase);
+router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), purchaseController.getPurchases);
+router.get('/:id', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), purchaseController.getPurchaseById);
 router.post('/:id/cancel', authenticate, authorize('ADMIN'), purchaseController.cancelPurchase);
 
 export default router;

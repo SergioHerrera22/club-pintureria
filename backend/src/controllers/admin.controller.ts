@@ -164,6 +164,15 @@ export const createUser = async (req: AuthRequest, res: Response, next: NextFunc
   }
 };
 
+/**
+ * Secciones reservadas para administradores: aunque el body las incluya,
+ * no se guardan en usuarios no-admin (los permisos personalizados expanden
+ * al personal dentro de las secciones de nivel cajera, nunca a admin).
+ */
+const ADMIN_ONLY_PERMISSION_KEYS = new Set([
+  'usuarios', 'productos', 'reglas-puntos', 'sucursales', 'marcas', 'categorias', 'configuracion',
+]);
+
 export const updateUser = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
@@ -198,7 +207,8 @@ export const updateUser = async (req: AuthRequest, res: Response, next: NextFunc
     if (effectiveRole === UserRole.ADMIN) {
       permissionsUpdate = Prisma.JsonNull;
     } else if (Array.isArray(permissions)) {
-      permissionsUpdate = permissions.filter((p: unknown): p is string => typeof p === 'string');
+      const valid = permissions.filter((p: unknown): p is string => typeof p === 'string');
+      permissionsUpdate = valid.filter((p) => !ADMIN_ONLY_PERMISSION_KEYS.has(p));
     } else if (permissions === null) {
       permissionsUpdate = Prisma.JsonNull;
     }

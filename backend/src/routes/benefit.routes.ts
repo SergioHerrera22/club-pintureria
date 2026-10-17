@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { validate } from '../middleware/validation';
 import * as benefitController from '../controllers/benefit.controller';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, authorize, authorizeWithPermission } from '../middleware/auth';
 
 const router = Router();
 
@@ -35,8 +35,8 @@ const updateBenefitValidation = z.object({
   params: z.object({ id: z.string() }),
 });
 
-router.get('/', authenticate, authorize('CAJERA', 'ADMIN'), benefitController.getBenefits);
-router.get('/:id', authenticate, authorize('CAJERA', 'ADMIN'), benefitController.getBenefitById);
+router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'beneficios'), benefitController.getBenefits);
+router.get('/:id', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'beneficios'), benefitController.getBenefitById);
 router.post('/', authenticate, authorize('ADMIN'), validate(benefitValidation), benefitController.createBenefit);
 router.put('/:id', authenticate, authorize('ADMIN'), validate(updateBenefitValidation), benefitController.updateBenefit);
 router.delete('/:id', authenticate, authorize('ADMIN'), benefitController.deleteBenefit);
