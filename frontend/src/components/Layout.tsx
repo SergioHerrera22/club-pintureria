@@ -74,6 +74,15 @@ export default function Layout() {
     }
     return item.roles.includes(user.role) && hasMenuPermission(user, item.key);
   });
+
+  // "Nuevo Cliente" tiene dos entradas (path /nuevo-cliente y /vendedor/nuevo-cliente).
+  // Se muestra una sola por clave para que no aparezca duplicada en el menú.
+  const seenKeys = new Set<string>();
+  const uniqueNav = filteredNav.filter(item => {
+    if (seenKeys.has(item.key)) return false;
+    seenKeys.add(item.key);
+    return true;
+  });
   
   return (
     <div className="min-h-screen bg-gray-50">
@@ -97,7 +106,7 @@ export default function Layout() {
         
         <nav className="mt-6 px-3 flex-1 overflow-y-auto" aria-label="Navegación principal">
           <ul className="space-y-1 pb-20" role="list">
-            {filteredNav.map((item) => (
+            {uniqueNav.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
