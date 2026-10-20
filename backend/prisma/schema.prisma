@@ -35,6 +35,8 @@ model User {
   redemptions         Redemption[]
   transactions        Transaction[]
   branch              Branch?              @relation(fields: [branchId], references: [id])
+  saleRevisionsRequested SaleRevision[]    @relation("SaleRevisionRequestedBy")
+  saleRevisionsReviewed  SaleRevision[]    @relation("SaleRevisionReviewedBy")
 
   @@index([dni])
   @@index([email])
@@ -372,10 +374,12 @@ model Purchase {
   cashier       User           @relation("PurchaseCashier", fields: [cashierId], references: [id])
   client        User           @relation("PurchaseClient", fields: [clientId], references: [id])
   items         PurchaseItem[]
+  revisions     SaleRevision[]
 
   @@index([clientId, createdAt])
   @@index([branchId, createdAt])
   @@index([receiptNumber])
+  @@index([cashierId, createdAt])
 }
 
 model PurchaseItem {
@@ -399,6 +403,43 @@ enum UserRole {
   CAJERA
   VENDEDOR
   CLIENTE
+}
+
+enum SaleRevisionStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+/// Solicitud de corrección de una venta hecha por el vendedor/cajera.
+/// El vendedor propone cambios (items, cliente, notas) con una observación;
+/// el administrador los aprueba (se aplican) o los rechaza (queda constancia).
+model SaleRevision {
+  id            String             @id @default(cuid())
+  purchaseId    String
+  requestedById String
+  status        SaleRevisionStatus @default(PENDIENTE)
+  /// Cambios propuestos: { items: [{productId, quantity, discount?}], newClientDni?, notes? }
+  changes       Json
+  /// Snapshot del estado original de la venta al momento de la solicitud
+  originalData  Json
+  /// Motivo del vendedor para pedir la corrección
+  observation   String
+  /// Preview calculado al crear la solicitud: { subtotal, discount, tax, total, pointsEarned, pointsDelta }
+  preview       Json?
+  /// Motivo por el cual el administrador rechazó la solicitud
+  adminResponse String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  purchase      Purchase           @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  requestedBy   User               @relation("SaleRevisionRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy    User?              @relation("SaleRevisionReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([purchaseId])
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
 }
 
 enum TransactionType {

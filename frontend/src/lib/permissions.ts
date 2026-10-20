@@ -17,7 +17,9 @@ export const MENU_ITEMS: MenuItem[] = [
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/vendedor/nuevo-cliente', roles: ['VENDEDOR'] },
   { key: 'clientes', label: 'Clientes', path: '/clients', roles: ['ADMIN', 'CAJERA', 'VENDEDOR'] },
   { key: 'ventas', label: 'Ventas', path: '/sales', roles: ['CAJERA'] },
+  { key: 'mis-ventas', label: 'Mis Ventas', path: '/mis-ventas', roles: ['VENDEDOR', 'CAJERA'] },
   { key: 'usuarios', label: 'Usuarios', path: '/admin-users', roles: ['ADMIN'] },
+  { key: 'revisiones-ventas', label: 'Revisiones de Ventas', path: '/sale-revisions', roles: ['ADMIN'] },
   { key: 'campanas', label: 'Campañas WhatsApp', path: '/campaigns', roles: ['ADMIN', 'CAJERA'] },
   { key: 'productos', label: 'Productos', path: '/products', roles: ['ADMIN'] },
   { key: 'reglas-puntos', label: 'Reglas de Puntos', path: '/point-rules', roles: ['ADMIN'] },
@@ -38,7 +40,9 @@ export const MENU_PERMISSION_OPTIONS: Array<MenuItem & { description: string }> 
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/nuevo-cliente', roles: [], description: 'Dar de alta nuevos clientes' },
   { key: 'clientes', label: 'Clientes', path: '/clients', roles: [], description: 'Ver y editar clientes, ajustar puntos' },
   { key: 'ventas', label: 'Ventas', path: '/sales', roles: [], description: 'Registrar ventas y canjes' },
+  { key: 'mis-ventas', label: 'Mis Ventas', path: '/mis-ventas', roles: [], description: 'Ver tus ventas y solicitar correcciones' },
   { key: 'usuarios', label: 'Usuarios', path: '/admin-users', roles: [], description: 'Gestionar usuarios del sistema' },
+  { key: 'revisiones-ventas', label: 'Revisiones de Ventas', path: '/sale-revisions', roles: [], description: 'Aprobar o rechazar correcciones de ventas' },
   { key: 'campanas', label: 'Campañas WhatsApp', path: '/campaigns', roles: [], description: 'Enviar campañas de WhatsApp' },
   { key: 'productos', label: 'Productos', path: '/products', roles: [], description: 'Catálogo de productos' },
   { key: 'reglas-puntos', label: 'Reglas de Puntos', path: '/point-rules', roles: [], description: 'Configurar cómo se ganan puntos' },
@@ -59,8 +63,8 @@ export const MENU_PERMISSION_OPTIONS: Array<MenuItem & { description: string }> 
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   ADMIN: MENU_PERMISSION_OPTIONS.map((o) => o.key),
-  CAJERA: ['dashboard', 'nuevo-cliente', 'clientes', 'ventas', 'campanas', 'premios', 'promociones', 'cupones', 'desafios', 'beneficios'],
-  VENDEDOR: ['nuevo-cliente', 'clientes'],
+  CAJERA: ['dashboard', 'nuevo-cliente', 'clientes', 'ventas', 'mis-ventas', 'campanas', 'premios', 'promociones', 'cupones', 'desafios', 'beneficios'],
+  VENDEDOR: ['nuevo-cliente', 'clientes', 'mis-ventas'],
   CLIENTE: [],
 };
 
@@ -71,6 +75,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
  */
 export const ADMIN_ONLY_MENU_KEYS = new Set([
   'usuarios',
+  'revisiones-ventas',
   'productos',
   'reglas-puntos',
   'sucursales',
