@@ -16,6 +16,17 @@ body {
   background-color: #f9fafb;
 }
 
+/* Inputs numéricos sin flechitas (spinner) — evita cambios accidentales con la rueda del mouse */
+.no-spin::-webkit-inner-spin-button,
+.no-spin::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;

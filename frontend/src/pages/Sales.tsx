@@ -9,9 +9,12 @@ import { useClientStore } from '../stores/clientStore';
 import { useAuthStore } from '../stores/authStore';
 
 const quickSaleSchema = z.object({
-  amount: z.number().positive('Monto requerido'),
+  amount: z.number({ invalid_type_error: 'Ingrese un monto válido' }).positive('Monto requerido'),
   notes: z.string().optional(),
 });
+
+/** Venta por productos desactivada: la carga de ventas es sólo por monto rápido. */
+const PRODUCT_SALE_ENABLED = false;
 
 const productSaleSchema = z.object({
   items: z.array(z.object({
@@ -247,7 +250,7 @@ export default function Sales() {
   
   const quickSaleForm = useForm<QuickSaleForm>({
     resolver: zodResolver(quickSaleSchema),
-    defaultValues: { amount: 0, notes: '' },
+    defaultValues: { amount: undefined as unknown as number, notes: '' },
   });
   
   const productSaleForm = useForm<ProductSaleForm>({
@@ -444,7 +447,7 @@ export default function Sales() {
         console.log('Quick purchase response:', response.data);
         
         setSuccess(`¡Nuevo cliente creado y venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
-        quickSaleForm.reset({ amount: 0, notes: '' });
+        quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
       } else {
         payload.items = selectedItems.map(item => ({
           productId: item.product.id,
@@ -494,7 +497,7 @@ export default function Sales() {
       
       setSuccess(`¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
       setClient(null);
-      quickSaleForm.reset({ amount: 0, notes: '' });
+      quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
       await refreshClientPoints();
       fetchRecentSales();
     } catch (err: any) {
@@ -574,7 +577,7 @@ export default function Sales() {
     setPendingDni('');
     setError('');
     setSuccess('');
-    quickSaleForm.reset({ amount: 0, notes: '' });
+    quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
     productSaleForm.reset({ notes: '' });
     clientSearchForm.reset({ dni: '' });
     newClientForm.reset({ firstName: '', lastName: '', email: '', phone: '', birthDate: '' });
@@ -685,7 +688,8 @@ export default function Sales() {
                         step="0.01"
                         min="0.01"
                         placeholder="0.00"
-                        className="input pl-8 text-right text-lg"
+                        className="input pl-8 text-right text-lg no-spin"
+                        onWheel={(e) => e.currentTarget.blur()}
                       />
                     </div>
                     <p className="mt-1 text-sm text-gray-500">
@@ -705,7 +709,7 @@ export default function Sales() {
                 </div>
               )}
               
-              {saleMode === 'products' && (
+              {PRODUCT_SALE_ENABLED && saleMode === 'products' && (
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="font-medium text-gray-900">Productos de la Venta</h3>
                   <div>
@@ -974,7 +978,8 @@ export default function Sales() {
             </div>
           )}
 
-          {/* Sale Mode Tabs */}
+          {/* Sale Mode Tabs — ocultas: la venta por productos está desactivada */}
+          {PRODUCT_SALE_ENABLED && (
           <div className="p-4 border-b border-gray-200">
             <div className="flex gap-2" role="tablist">
               <button
@@ -1005,6 +1010,7 @@ export default function Sales() {
               </button>
             </div>
           </div>
+          )}
 
           {/* Quick Sale Form */}
           {saleMode === 'quick' && (
@@ -1020,7 +1026,8 @@ export default function Sales() {
                     step="0.01"
                     min="0.01"
                     placeholder="0.00"
-                    className="input pl-8 text-right text-lg"
+                    className="input pl-8 text-right text-lg no-spin"
+                    onWheel={(e) => e.currentTarget.blur()}
                   />
                 </div>
                 <p className="mt-1 text-sm text-gray-500">
@@ -1062,8 +1069,8 @@ export default function Sales() {
             </form>
           )}
 
-          {/* Product Sale Form */}
-          {saleMode === 'products' && (
+          {/* Product Sale Form — desactivado */}
+          {PRODUCT_SALE_ENABLED && saleMode === 'products' && (
             <form onSubmit={productSaleForm.handleSubmit(handleProductSale)} className="p-4 space-y-4">
               <div>
                 <label className="label">Buscar Productos</label>
