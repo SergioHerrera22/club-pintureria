@@ -4,8 +4,9 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatCurrency, formatDateTime } from '../lib/utils';
-import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X } from 'lucide-react';
+import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X, UserCheck } from 'lucide-react';
 import { useClientStore } from '../stores/clientStore';
+import { useAuthStore } from '../stores/authStore';
 
 const quickSaleSchema = z.object({
   amount: z.number().positive('Monto requerido'),
@@ -113,6 +114,37 @@ interface SaleResponse {
   appliedCoupon: any;
 }
 
+const VendorSelector = ({
+  vendors,
+  value,
+  onChange,
+}: {
+  vendors: Array<{ id: string; name: string; dni: string }>;
+  value: string;
+  onChange: (v: string) => void;
+}) => (
+  <div>
+    <label htmlFor="vendor-select" className="label flex items-center gap-1.5">
+      <UserCheck className="w-4 h-4 text-gray-400" />
+      Vendedor que atendió (opcional)
+    </label>
+    <select
+      id="vendor-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="input"
+    >
+      <option value="">— Sin vendedor asignado —</option>
+      {vendors.map(v => (
+        <option key={v.id} value={v.id}>{v.name} (DNI {v.dni})</option>
+      ))}
+    </select>
+    <p className="mt-1 text-xs text-gray-400">
+      La venta se le carga al vendedor elegido y le aparece en su "Mis Ventas".
+    </p>
+  </div>
+);
+
 const RecentSales = ({ recentSales, salesLoading }: { recentSales: Transaction[]; salesLoading: boolean }) => {
   if (salesLoading) {
     return (
@@ -201,6 +233,13 @@ export default function Sales() {
   const [recentSales, setRecentSales] = useState<Transaction[]>([]);
   const [clientHistory, setClientHistory] = useState<Transaction[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
+  const [vendors, setVendors] = useState<Array<{ id: string; name: string; dni: string }>>([]);
+  const [selectedVendorId, setSelectedVendorId] = useState('');
+
+  const { user } = useAuthStore();
+  // El selector de vendedor aplica a quien registra la venta (cajera/admin).
+  // Un vendedor registra a su propio nombre.
+  const canPickVendor = user?.role === 'CAJERA' || user?.role === 'ADMIN';
   
   // Sync local client state with store
   const client = currentClient;
@@ -246,6 +285,22 @@ export default function Sales() {
       setSalesLoading(false);
     }
   };
+
+  const fetchVendors = async () => {
+    try {
+      const response = await api.get<{ vendors: Array<{ id: string; name: string; dni: string }> }>('/purchases/vendors');
+      setVendors(response.data.vendors);
+    } catch {
+      setVendors([]);
+    }
+  };
+
+  useEffect(() => {
+    if (canPickVendor) {
+      fetchVendors();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchClientHistory = async (clientId: string) => {
     try {
@@ -374,6 +429,7 @@ export default function Sales() {
         email: newClientData.email || undefined,
         phone: newClientData.phone || undefined,
         birthDate: newClientData.birthDate || undefined,
+        vendorId: selectedVendorId || undefined,
       };
       
       console.log('Creating client and sale with payload:', payload);
@@ -432,6 +488,7 @@ export default function Sales() {
         dni: client.dni,
         amount: data.amount,
         notes: data.notes,
+        vendorId: selectedVendorId || undefined,
       });
       console.log('Quick sale response:', response.data);
       
@@ -466,6 +523,7 @@ export default function Sales() {
         dni: client.dni,
         items,
         notes: data.notes,
+        vendorId: selectedVendorId || undefined,
       });
       console.log('Product sale response:', response.data);
       
@@ -969,6 +1027,10 @@ export default function Sales() {
                   Puntos estimados: ~{formatPoints(getEstimatedPoints(quickSaleForm.watch('amount') || 0))} pts
                 </p>
               </div>
+
+              {canPickVendor && (
+                <VendorSelector vendors={vendors} value={selectedVendorId} onChange={setSelectedVendorId} />
+              )}
               
               <div>
                 <label htmlFor="quick-notes" className="label">Observaciones (opcional)</label>
@@ -1122,6 +1184,10 @@ export default function Sales() {
                 </div>
               )}
               
+              {canPickVendor && (
+                <VendorSelector vendors={vendors} value={selectedVendorId} onChange={setSelectedVendorId} />
+              )}
+
               <div>
                 <label htmlFor="notes" className="label">Observaciones (opcional)</label>
                 <textarea

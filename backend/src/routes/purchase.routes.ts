@@ -30,6 +30,9 @@ const createPurchaseValidation = z.object({
 // Ventas propias del usuario (vendedor/cajera/admin)
 router.get('/mine', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), saleRevisionController.getMyPurchases);
 
+// Vendedores activos para el selector al registrar una venta (cajera/admin)
+router.get('/vendors', authenticate, authorize('CAJERA', 'ADMIN'), saleRevisionController.getVendorsForSale);
+
 // Solicitudes de revisión (admin)
 router.get('/revisions', authenticate, authorize('ADMIN'), saleRevisionController.listRevisions);
 

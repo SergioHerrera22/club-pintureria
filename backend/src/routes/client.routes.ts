@@ -51,6 +51,8 @@ const purchaseSchema = z.object({
     })).min(1),
     paymentMethod: z.string().optional(),
     notes: z.string().optional(),
+    // Vendedor acreditado con la venta (opcional)
+    vendorId: z.string().min(1).optional(),
     // Optional fields for auto-creating new client
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
@@ -65,6 +67,8 @@ const quickPurchaseSchema = z.object({
     dni: z.string().min(7).max(8),
     amount: z.number().positive(),
     notes: z.string().optional(),
+    // Vendedor acreditado con la venta (opcional)
+    vendorId: z.string().min(1).optional(),
     // Optional fields for auto-creating new client
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),
