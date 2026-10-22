@@ -28,6 +28,37 @@ const userBranchFilter = (req) => {
 const branchWhere = (scope) => scope.isGlobal
     ? {}
     : { OR: [{ branchId: scope.branchId }, { branchId: null }] };
+/**
+ * ¿Es la primera compra del cliente? Considera sólo ventas completadas y
+ * excluye la recién creada (para el aviso de WhatsApp de la carga).
+ */
+const isFirstPurchaseFor = async (clientId, excludePurchaseId) => {
+    const previous = await prisma_1.prisma.purchase.count({
+        where: { clientId, status: 'COMPLETADA', id: { not: excludePurchaseId } },
+    });
+    return previous === 0;
+};
+/**
+ * Mensaje de WhatsApp Web para la compra recién cargada: si el cliente es
+ * nuevo en el club (primera compra) manda la bienvenida, si no, los puntos
+ * ganados y el saldo acumulado. Devuelve null sin teléfono válido.
+ */
+const buildSaleWhatsapp = async (clientUser, purchase) => {
+    const isFirstPurchase = await isFirstPurchaseFor(clientUser.id, purchase.id);
+    return whatsapp_service_1.whatsappService.buildPurchaseMessage({
+        phone: clientUser.phone,
+        firstName: clientUser.firstName,
+        lastName: clientUser.lastName,
+        dni: clientUser.dni,
+        pointsEarned: purchase.pointsEarned,
+        pointsBalance: purchase.pointsBalance,
+        amount: purchase.total,
+        receiptNumber: purchase.receiptNumber,
+        branchName: purchase.branch?.name ?? null,
+        purchasedAt: purchase.createdAt,
+        isFirstPurchase,
+    });
+};
 const DAY_MS = 24 * 60 * 60 * 1000;
 /**
  * Estado de vencimiento de puntos de un cliente, con la misma lógica que
@@ -594,6 +625,7 @@ const registerPurchase = async (req, res, next) => {
             })),
             notes,
         });
+        const whatsapp = await buildSaleWhatsapp(clientUser, purchase);
         // Las notificaciones (email/WhatsApp) ya se envían dentro de PurchaseService.createPurchase
         res.status(201).json({
             transaction: {
@@ -613,6 +645,7 @@ const registerPurchase = async (req, res, next) => {
             },
             appliedPromotions: purchase.appliedPromotions,
             appliedCoupon: purchase.appliedCoupon,
+            whatsapp,
         });
     }
     catch (error) {
@@ -799,6 +832,7 @@ const registerQuickPurchase = async (req, res, next) => {
                 }],
             notes: notes || 'Compra rápida',
         });
+        const whatsapp = await buildSaleWhatsapp(clientUser, purchase);
         // Las notificaciones (email/WhatsApp) ya se envían dentro de PurchaseService.createPurchase
         res.status(201).json({
             transaction: {
@@ -818,6 +852,7 @@ const registerQuickPurchase = async (req, res, next) => {
             },
             appliedPromotions: purchase.appliedPromotions,
             appliedCoupon: purchase.appliedCoupon,
+            whatsapp,
         });
     }
     catch (error) {

@@ -312,7 +312,11 @@ export class PurchaseService {
         await emailService.sendPointsEarnedEmail(client.email, client.firstName, finalPoints, newBalance);
       }
       if (finalPoints > 0 && whatsappEnabled && client.phone) {
-        await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, finalPoints, newBalance);
+        await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, finalPoints, newBalance, {
+          amount: finalTotal,
+          receiptNumber: purchase.receiptNumber,
+          branchName: branch?.name ?? null,
+        });
       }
     } catch (err) {
       console.error('Error enviando notificaciones:', err);

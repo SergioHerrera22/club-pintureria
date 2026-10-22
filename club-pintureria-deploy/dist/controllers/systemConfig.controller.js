@@ -152,7 +152,7 @@ const initializeDefaultConfigs = async (req, res, next) => {
             {
                 key: 'whatsapp_templates',
                 value: { ...systemConfig_service_1.DEFAULT_WHATSAPP_TEMPLATES },
-                description: 'Plantillas editables de los mensajes de WhatsApp. Variables: {nombre}, {apellido}, {dni}, {puntos}, {total}, {premio}, {dias}, {empresa}',
+                description: 'Plantillas editables de los mensajes de WhatsApp. Variables: {nombre}, {apellido}, {dni}, {empresa}, {puntos} (puntos de la compra; en campañas, los de la última compra), {total} (saldo acumulado), {monto}, {ticket}, {sucursal}, {fecha} (sólo en la plantilla de compra), {premio} (canje), {dias} (vencimiento)',
             },
         ];
         // Solo crear las que faltan: no sobrescribir valores personalizados por el admin

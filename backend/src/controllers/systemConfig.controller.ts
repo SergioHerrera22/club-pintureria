@@ -154,7 +154,7 @@ export const initializeDefaultConfigs = async (req: AuthRequest, res: Response, 
       {
         key: 'whatsapp_templates',
         value: { ...DEFAULT_WHATSAPP_TEMPLATES } as Record<string, string>,
-        description: 'Plantillas editables de los mensajes de WhatsApp. Variables: {nombre}, {apellido}, {dni}, {puntos}, {total}, {premio}, {dias}, {empresa}',
+        description: 'Plantillas editables de los mensajes de WhatsApp. Variables: {nombre}, {apellido}, {dni}, {empresa}, {puntos} (puntos de la compra; en campañas, los de la última compra), {total} (saldo acumulado), {monto}, {ticket}, {sucursal}, {fecha} (sólo en la plantilla de compra), {premio} (canje), {dias} (vencimiento)',
       },
     ];
     

@@ -5,6 +5,8 @@ export interface CampaignRecipient {
     dni: string;
     phone: string | null;
     currentPoints: number;
+    /** Puntos ganados en la última compra del cliente (0 si nunca compró). */
+    lastPointsEarned: number;
     branchId: string | null;
     branchName: string | null;
     /** Fecha de alta del cliente. El frontend la usa para mostrar el badge "Nuevo". */
@@ -66,6 +68,11 @@ export declare class CampaignService {
      */
     private static toRecipient;
     private static resolveRecipients;
+    /**
+     * Completa cada destinatario con los puntos ganados en su última compra
+     * (variable {puntos} de la campaña). Una sola query con distinct por cliente.
+     */
+    private static attachLastPointsEarned;
     /**
      * Prepara la campaña sin enviarla: devuelve el mensaje ya renderizado y el
      * teléfono normalizado de cada destinatario, para que el frontend abra

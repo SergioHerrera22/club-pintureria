@@ -32,6 +32,7 @@ class CampaignService {
             orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         });
         const recipients = users.map((u) => this.toRecipient(u));
+        await this.attachLastPointsEarned(recipients);
         const withPhone = recipients.filter((r) => !!r.phone && r.phone.trim().length > 0).length;
         return {
             recipients,
@@ -86,7 +87,7 @@ class CampaignService {
                 nombre: recipient.firstName,
                 apellido: recipient.lastName,
                 dni: recipient.dni,
-                puntos: recipient.currentPoints,
+                puntos: recipient.lastPointsEarned,
                 total: recipient.currentPoints,
                 empresa: company,
             });
@@ -116,6 +117,7 @@ class CampaignService {
             dni: u.dni,
             phone: u.phone,
             currentPoints: u.clientProfile?.currentPoints ?? 0,
+            lastPointsEarned: 0,
             branchId: u.branchId,
             branchName: u.branch?.name ?? null,
             createdAt: u.createdAt.toISOString(),
@@ -141,9 +143,29 @@ class CampaignService {
                     clientProfile: { select: { currentPoints: true } },
                 },
             });
-            return users.map((u) => this.toRecipient(u));
+            const recipients = users.map((u) => this.toRecipient(u));
+            await this.attachLastPointsEarned(recipients);
+            return recipients;
         }
         throw new errorHandler_1.AppError(400, 'Seleccioná al menos un destinatario o elegí "todos los clientes"');
+    }
+    /**
+     * Completa cada destinatario con los puntos ganados en su última compra
+     * (variable {puntos} de la campaña). Una sola query con distinct por cliente.
+     */
+    static async attachLastPointsEarned(recipients) {
+        if (recipients.length === 0)
+            return;
+        const rows = await prisma_1.prisma.purchase.findMany({
+            where: { clientId: { in: recipients.map((r) => r.id) }, status: 'COMPLETADA' },
+            orderBy: { createdAt: 'desc' },
+            distinct: ['clientId'],
+            select: { clientId: true, pointsEarned: true },
+        });
+        const lastByClient = new Map(rows.map((row) => [row.clientId, row.pointsEarned]));
+        for (const recipient of recipients) {
+            recipient.lastPointsEarned = lastByClient.get(recipient.id) ?? 0;
+        }
     }
     /**
      * Prepara la campaña sin enviarla: devuelve el mensaje ya renderizado y el
@@ -208,7 +230,7 @@ class CampaignService {
                     nombre: recipient.firstName,
                     apellido: recipient.lastName,
                     dni: recipient.dni,
-                    puntos: recipient.currentPoints,
+                    puntos: recipient.lastPointsEarned,
                     total: recipient.currentPoints,
                     empresa: company,
                 }),

@@ -76,6 +76,24 @@ const TEMPLATE_LABELS: Record<string, string> = {
 
 const VARIABLES = ['{nombre}', '{apellido}', '{dni}', '{puntos}', '{total}', '{empresa}'];
 
+/** Variables que acepta cada plantilla al renderizarse. */
+const TEMPLATE_VARIABLES: Record<string, string[]> = {
+  points_earned: ['{nombre}', '{puntos}', '{total}', '{monto}', '{ticket}', '{sucursal}', '{fecha}', '{empresa}'],
+  welcome: ['{nombre}', '{empresa}'],
+  redemption: ['{nombre}', '{premio}', '{puntos}', '{total}', '{empresa}'],
+  points_expiring: ['{nombre}', '{puntos}', '{dias}', '{empresa}'],
+  campaign_default: VARIABLES,
+};
+
+/** Dónde se usa cada plantilla. */
+const TEMPLATE_HINTS: Record<string, string> = {
+  points_earned: 'Se usa al cargar una compra (se abre en WhatsApp Web de la cajera).',
+  welcome: 'Se usa si es la primera compra del cliente o en el alta desde el portal.',
+  redemption: 'Al canjear puntos por un premio.',
+  points_expiring: 'Aviso automático por puntos por vencer.',
+  campaign_default: 'Se usa en Campañas → Enviar cuando no se elige otra plantilla.',
+};
+
 export default function Campaigns() {
   const [tab, setTab] = useState<'send' | 'templates'>('send');
   const [recipients, setRecipients] = useState<CampaignRecipient[]>([]);
@@ -362,7 +380,8 @@ export default function Campaigns() {
               </div>
 
               <p className="text-xs text-gray-500">
-                Se reemplazan por los datos de cada cliente al enviar.
+                Se reemplazan por los datos de cada cliente al enviar. {'{puntos}'} son los puntos de la última
+                compra y {'{total}'} el saldo acumulado.
               </p>
             </div>
 
@@ -515,7 +534,7 @@ export default function Campaigns() {
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
               <div>
                 <h2 className="font-semibold text-gray-900">Plantillas de mensajes</h2>
-                <p className="text-sm text-gray-500">Personalizá los mensajes automáticos. Variables: {VARIABLES.join(', ')}</p>
+                <p className="text-sm text-gray-500">Personalizá los mensajes automáticos. Cada plantilla lista sus variables.</p>
               </div>
               <button onClick={handleSaveTemplates} disabled={savingTemplates} className="btn-primary flex items-center gap-2 w-full sm:w-auto">
                 {savingTemplates ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -537,6 +556,10 @@ export default function Campaigns() {
                     onChange={(e) => setTemplates((prev) => ({ ...prev, [key]: e.target.value }))}
                     className="input font-mono text-sm resize-y"
                   />
+                  <p className="mt-1 text-xs text-gray-400">
+                    {TEMPLATE_HINTS[key] ? `${TEMPLATE_HINTS[key]} ` : ''}
+                    Variables: {(TEMPLATE_VARIABLES[key] || VARIABLES).join(' ')}
+                  </p>
                 </div>
               ))}
             </div>

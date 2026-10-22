@@ -213,7 +213,11 @@ class PurchaseService {
                 await email_service_1.emailService.sendPointsEarnedEmail(client.email, client.firstName, finalPoints, newBalance);
             }
             if (finalPoints > 0 && whatsappEnabled && client.phone) {
-                await whatsapp_service_1.whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, finalPoints, newBalance);
+                await whatsapp_service_1.whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, finalPoints, newBalance, {
+                    amount: finalTotal,
+                    receiptNumber: purchase.receiptNumber,
+                    branchName: branch?.name ?? null,
+                });
             }
         }
         catch (err) {

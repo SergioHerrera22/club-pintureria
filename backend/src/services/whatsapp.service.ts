@@ -124,11 +124,92 @@ class WhatsAppService {
     });
   }
 
+  /** Formato de puntos: 1.500 (es-AR, sin decimales). */
+  private formatPoints(value: number): string {
+    return new Intl.NumberFormat('es-AR').format(Math.round(value));
+  }
+
+  /** Formato de dinero: $ 12.500 (es-AR, sin decimales). */
+  private formatAmount(value: number): string {
+    return new Intl.NumberFormat('es-AR', {
+      style: 'currency',
+      currency: 'ARS',
+      minimumFractionDigits: 0,
+    }).format(value);
+  }
+
+  /** Fecha/hora corta: 22/10/2026, 15:10 */
+  private formatDateTime(date: Date = new Date()): string {
+    return new Intl.DateTimeFormat('es-AR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(date);
+  }
+
+  /**
+   * Mensaje de WhatsApp de una compra para abrirlo en WhatsApp Web desde el
+   * navegador de la cajera (flujo de carga de venta).
+   * - Primera compra del cliente → plantilla de bienvenida.
+   * - Resto → plantilla de puntos ganados (puntos de la compra + saldo acumulado).
+   * Devuelve null si el cliente no tiene teléfono válido: no se abre nada.
+   */
+  async buildPurchaseMessage(input: {
+    phone?: string | null;
+    firstName: string;
+    lastName?: string;
+    dni?: string;
+    pointsEarned: number;
+    pointsBalance: number;
+    amount?: number | null;
+    receiptNumber?: string | null;
+    branchName?: string | null;
+    purchasedAt?: Date;
+    isFirstPurchase: boolean;
+  }): Promise<{
+    phone: string;
+    message: string;
+    templateKey: 'welcome' | 'points_earned';
+    isFirstPurchase: boolean;
+  } | null> {
+    const phone = this.formatPhoneNumber(input.phone || '');
+    if (!phone) return null;
+
+    const [templates, company] = await Promise.all([
+      SystemConfigService.getWhatsappTemplates(),
+      SystemConfigService.getCompanyName(),
+    ]);
+
+    const templateKey = input.isFirstPurchase ? 'welcome' : 'points_earned';
+    const message = this.renderTemplate(templates[templateKey], {
+      nombre: input.firstName,
+      apellido: input.lastName || '',
+      dni: input.dni || '',
+      puntos: this.formatPoints(input.pointsEarned),
+      total: this.formatPoints(input.pointsBalance),
+      monto: input.amount !== undefined && input.amount !== null ? this.formatAmount(input.amount) : '',
+      ticket: input.receiptNumber || '',
+      sucursal: input.branchName || '',
+      fecha: this.formatDateTime(input.purchasedAt || new Date()),
+      empresa: company,
+    });
+
+    return { phone, message, templateKey, isFirstPurchase: input.isFirstPurchase };
+  }
+
   async sendPointsEarnedNotification(
     phone: string,
     firstName: string,
     pointsEarned: number,
-    newBalance: number
+    newBalance: number,
+    meta?: {
+      amount?: number | null;
+      receiptNumber?: string | null;
+      branchName?: string | null;
+    }
   ): Promise<boolean> {
     const [templates, company] = await Promise.all([
       SystemConfigService.getWhatsappTemplates(),
@@ -137,8 +218,12 @@ class WhatsAppService {
 
     const body = this.renderTemplate(templates.points_earned || DEFAULT_WHATSAPP_TEMPLATES.points_earned, {
       nombre: firstName,
-      puntos: pointsEarned.toLocaleString('es-AR'),
-      total: newBalance.toLocaleString('es-AR'),
+      puntos: this.formatPoints(pointsEarned),
+      total: this.formatPoints(newBalance),
+      monto: meta?.amount !== undefined && meta?.amount !== null ? this.formatAmount(meta.amount) : '',
+      ticket: meta?.receiptNumber || '',
+      sucursal: meta?.branchName || '',
+      fecha: this.formatDateTime(),
       empresa: company,
     });
     

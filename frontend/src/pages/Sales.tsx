@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatCurrency, formatDateTime } from '../lib/utils';
-import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X, UserCheck } from 'lucide-react';
+import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X, UserCheck, MessageCircle } from 'lucide-react';
 import { useClientStore } from '../stores/clientStore';
 import { useAuthStore } from '../stores/authStore';
 
@@ -97,6 +97,13 @@ interface SelectedItem {
   quantity: number;
 }
 
+interface SaleWhatsapp {
+  phone: string;
+  message: string;
+  templateKey: 'welcome' | 'points_earned';
+  isFirstPurchase: boolean;
+}
+
 interface SaleResponse {
   transaction: {
     id: string;
@@ -115,6 +122,8 @@ interface SaleResponse {
   };
   appliedPromotions: any[];
   appliedCoupon: any;
+  /** Mensaje para abrir WhatsApp Web (null si el cliente no tiene teléfono) */
+  whatsapp?: SaleWhatsapp | null;
 }
 
 const VendorSelector = ({
@@ -238,6 +247,40 @@ export default function Sales() {
   const [salesLoading, setSalesLoading] = useState(false);
   const [vendors, setVendors] = useState<Array<{ id: string; name: string; dni: string }>>([]);
   const [selectedVendorId, setSelectedVendorId] = useState('');
+
+  /** Mensaje de WhatsApp Web preparado al cargar la venta (null = sin teléfono) */
+  const [pendingWhatsapp, setPendingWhatsapp] = useState<SaleWhatsapp | null>(null);
+  const [whatsappBlocked, setWhatsappBlocked] = useState(false);
+
+  const whatsappUrl = (phone: string, message: string) =>
+    `https://web.whatsapp.com/send?phone=${phone}&text=${encodeURIComponent(message)}&type=phone_number&app_absent=0`;
+
+  /** Abre WhatsApp Web con el mensaje. false = el navegador bloqueó la pestaña. */
+  const openWhatsappTab = (phone: string, message: string): boolean =>
+    !!window.open(whatsappUrl(phone, message), '_blank');
+
+  /** Limpia los avisos de la venta anterior antes de registrar una nueva. */
+  const clearSaleFeedback = () => {
+    setSuccess('');
+    setPendingWhatsapp(null);
+    setWhatsappBlocked(false);
+  };
+
+  /**
+   * Resultado de una venta registrada: muestra el aviso y abre WhatsApp Web
+   * con el mensaje listo (bienvenida en la primera compra, puntos en el resto).
+   */
+  const finishSale = (response: SaleResponse, message: string) => {
+    setSuccess(message);
+    const wa = response.whatsapp;
+    if (wa?.phone && wa.message) {
+      setPendingWhatsapp(wa);
+      setWhatsappBlocked(!openWhatsappTab(wa.phone, wa.message));
+    } else {
+      setPendingWhatsapp(null);
+      setWhatsappBlocked(false);
+    }
+  };
 
   const { user } = useAuthStore();
   // El selector de vendedor aplica a quien registra la venta (cajera/admin).
@@ -422,7 +465,7 @@ export default function Sales() {
 
     setSaleLoading(true);
     setError('');
-    setSuccess('');
+    clearSaleFeedback();
     
     try {
       const payload: any = {
@@ -446,7 +489,7 @@ export default function Sales() {
         const response = await api.post<SaleResponse>('/clients/quick-purchase', payload);
         console.log('Quick purchase response:', response.data);
         
-        setSuccess(`¡Nuevo cliente creado y venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
+        finishSale(response.data, `¡Nuevo cliente creado y venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
         quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
       } else {
         payload.items = selectedItems.map(item => ({
@@ -459,7 +502,7 @@ export default function Sales() {
         const response = await api.post<SaleResponse>('/clients/purchase', payload);
         console.log('Product purchase response:', response.data);
         
-        setSuccess(`¡Nuevo cliente creado y venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
+        finishSale(response.data, `¡Nuevo cliente creado y venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
         setSelectedItems([]);
         productSaleForm.reset({ notes: '' });
       }
@@ -483,7 +526,7 @@ export default function Sales() {
     
     setSaleLoading(true);
     setError('');
-    setSuccess('');
+    clearSaleFeedback();
     
     try {
       console.log('Quick sale for client:', client.dni, 'amount:', data.amount);
@@ -495,7 +538,7 @@ export default function Sales() {
       });
       console.log('Quick sale response:', response.data);
       
-      setSuccess(`¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
+      finishSale(response.data, `¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
       setClient(null);
       quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
       await refreshClientPoints();
@@ -513,7 +556,7 @@ export default function Sales() {
     
     setSaleLoading(true);
     setError('');
-    setSuccess('');
+    clearSaleFeedback();
     
     try {
       const items = selectedItems.map(item => ({
@@ -530,7 +573,7 @@ export default function Sales() {
       });
       console.log('Product sale response:', response.data);
       
-      setSuccess(`¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
+      finishSale(response.data, `¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
       setSelectedItems([]);
       setClient(null);
       productSaleForm.reset({ notes: '' });
@@ -576,7 +619,7 @@ export default function Sales() {
     setShowNewClientForm(false);
     setPendingDni('');
     setError('');
-    setSuccess('');
+    clearSaleFeedback();
     quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
     productSaleForm.reset({ notes: '' });
     clientSearchForm.reset({ dni: '' });
@@ -1239,11 +1282,31 @@ export default function Sales() {
       </div>
 
       {success && (
-        <div className="fixed bottom-4 right-4 z-50 animate-slide-up">
-          <div className="bg-green-600 text-white px-6 py-3 rounded-lg shadow-lg flex items-center gap-2">
-            <Award className="w-5 h-5" />
-            <span>{success}</span>
+        <div className="fixed bottom-4 right-4 z-50 animate-slide-up max-w-md">
+          <div className="bg-green-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center gap-3">
+            <Award className="w-5 h-5 flex-shrink-0" />
+            <span className="text-sm">{success}</span>
+            {pendingWhatsapp && (
+              <button
+                type="button"
+                onClick={() => setWhatsappBlocked(!openWhatsappTab(pendingWhatsapp.phone, pendingWhatsapp.message))}
+                className="ml-auto flex-shrink-0 bg-white text-green-700 hover:bg-green-50 px-3 py-1.5 rounded-md text-sm font-medium flex items-center gap-1.5"
+                title={
+                  pendingWhatsapp.isFirstPurchase
+                    ? 'Mensaje de bienvenida (primera compra)'
+                    : 'Mensaje de puntos ganados'
+                }
+              >
+                <MessageCircle className="w-4 h-4" />
+                WhatsApp
+              </button>
+            )}
           </div>
+          {pendingWhatsapp && whatsappBlocked && (
+            <p className="mt-1 text-xs text-amber-800 bg-amber-100 border border-amber-200 rounded px-2 py-1">
+              El navegador bloqueó la pestaña: tocá en "WhatsApp" para abrirla.
+            </p>
+          )}
         </div>
       )}
     </div>

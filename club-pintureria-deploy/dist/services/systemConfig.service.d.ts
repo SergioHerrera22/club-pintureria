@@ -7,8 +7,17 @@ export interface WhatsAppTemplates {
     points_expiring: string;
     campaign_default: string;
 }
+/**
+ * Plantillas por defecto (v2). Formato de WhatsApp: *negrita*, listas con
+ * emojis y saltos de línea con \n. Variables disponibles por plantilla:
+ * - points_earned: {nombre} {puntos} {total} {monto} {ticket} {sucursal} {fecha} {empresa}
+ * - welcome: {nombre} {empresa}
+ * - redemption: {nombre} {premio} {puntos} {total} {empresa}
+ * - points_expiring: {nombre} {puntos} {dias} {empresa}
+ * - campaign_default: {nombre} {apellido} {dni} {puntos} {total} {empresa}
+ */
 export declare const DEFAULT_WHATSAPP_TEMPLATES: WhatsAppTemplates;
-export declare const DEFAULT_WHATSAPP_CAMPAIGN_MESSAGE = "Hola {nombre}!\n\n{empresa} tiene novedades para vos.\n\nTe esperamos.";
+export declare const DEFAULT_WHATSAPP_CAMPAIGN_MESSAGE: string;
 export declare class SystemConfigService {
     static get<T>(key: string, fallback: T): Promise<T>;
     static getNotificationsEnabled(channel: 'email' | 'whatsapp'): Promise<boolean>;
