@@ -37,6 +37,7 @@ model User {
   branch              Branch?              @relation(fields: [branchId], references: [id])
   saleRevisionsRequested SaleRevision[]    @relation("SaleRevisionRequestedBy")
   saleRevisionsReviewed  SaleRevision[]    @relation("SaleRevisionReviewedBy")
+  vendorPurchases        Purchase[]        @relation("PurchaseVendor")
 
   @@index([dni])
   @@index([email])
@@ -368,11 +369,14 @@ model Purchase {
   couponId      String?
   status        PurchaseStatus @default(COMPLETADA)
   notes         String?
+  /// Vendedor acreditado con la venta (la cajera registra, el vendedor atiende)
+  vendorId      String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   branch        Branch         @relation(fields: [branchId], references: [id])
   cashier       User           @relation("PurchaseCashier", fields: [cashierId], references: [id])
   client        User           @relation("PurchaseClient", fields: [clientId], references: [id])
+  vendor        User?          @relation("PurchaseVendor", fields: [vendorId], references: [id])
   items         PurchaseItem[]
   revisions     SaleRevision[]
 
@@ -380,6 +384,7 @@ model Purchase {
   @@index([branchId, createdAt])
   @@index([receiptNumber])
   @@index([cashierId, createdAt])
+  @@index([vendorId, createdAt])
 }
 
 model PurchaseItem {

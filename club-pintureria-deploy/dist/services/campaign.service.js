@@ -6,27 +6,32 @@ const whatsapp_service_1 = require("./whatsapp.service");
 const systemConfig_service_1 = require("./systemConfig.service");
 const errorHandler_1 = require("../middleware/errorHandler");
 class CampaignService {
-    static async getRecipients() {
+    /**
+     * Filtro de sucursal para los destinatarios:
+     * - Sin branchId (o vacío): todos los clientes.
+     * - Con branchId: solo los clientes de esa sucursal.
+     */
+    static branchWhere(branchId) {
+        const id = (branchId || '').trim();
+        return id ? { branchId: id } : {};
+    }
+    static async getRecipients(branchId) {
         const users = await prisma_1.prisma.user.findMany({
-            where: { role: 'CLIENTE', isActive: true },
+            where: { role: 'CLIENTE', isActive: true, ...this.branchWhere(branchId) },
             select: {
                 id: true,
                 firstName: true,
                 lastName: true,
                 dni: true,
                 phone: true,
+                createdAt: true,
+                branchId: true,
+                branch: { select: { name: true } },
                 clientProfile: { select: { currentPoints: true } },
             },
             orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
         });
-        const recipients = users.map((u) => ({
-            id: u.id,
-            firstName: u.firstName,
-            lastName: u.lastName,
-            dni: u.dni,
-            phone: u.phone,
-            currentPoints: u.clientProfile?.currentPoints ?? 0,
-        }));
+        const recipients = users.map((u) => this.toRecipient(u));
         const withPhone = recipients.filter((r) => !!r.phone && r.phone.trim().length > 0).length;
         return {
             recipients,
@@ -99,31 +104,44 @@ class CampaignService {
         }
         return result;
     }
+    /**
+     * Mapea un usuario (cliente) al formato de destinatario de la campaña.
+     * Compartido entre el listado y la resolución de destinatarios del envío.
+     */
+    static toRecipient(u) {
+        return {
+            id: u.id,
+            firstName: u.firstName,
+            lastName: u.lastName,
+            dni: u.dni,
+            phone: u.phone,
+            currentPoints: u.clientProfile?.currentPoints ?? 0,
+            branchId: u.branchId,
+            branchName: u.branch?.name ?? null,
+            createdAt: u.createdAt.toISOString(),
+        };
+    }
     static async resolveRecipients(input) {
         if (input.sendToAll) {
-            const data = await this.getRecipients();
+            const data = await this.getRecipients(input.branchId);
             return data.recipients;
         }
         if (input.recipientIds && input.recipientIds.length > 0) {
             const users = await prisma_1.prisma.user.findMany({
-                where: { id: { in: input.recipientIds }, role: 'CLIENTE' },
+                where: { id: { in: input.recipientIds }, role: 'CLIENTE', ...this.branchWhere(input.branchId) },
                 select: {
                     id: true,
                     firstName: true,
                     lastName: true,
                     dni: true,
                     phone: true,
+                    createdAt: true,
+                    branchId: true,
+                    branch: { select: { name: true } },
                     clientProfile: { select: { currentPoints: true } },
                 },
             });
-            return users.map((u) => ({
-                id: u.id,
-                firstName: u.firstName,
-                lastName: u.lastName,
-                dni: u.dni,
-                phone: u.phone,
-                currentPoints: u.clientProfile?.currentPoints ?? 0,
-            }));
+            return users.map((u) => this.toRecipient(u));
         }
         throw new errorHandler_1.AppError(400, 'Seleccioná al menos un destinatario o elegí "todos los clientes"');
     }

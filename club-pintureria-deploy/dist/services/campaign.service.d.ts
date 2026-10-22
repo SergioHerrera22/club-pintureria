@@ -5,12 +5,18 @@ export interface CampaignRecipient {
     dni: string;
     phone: string | null;
     currentPoints: number;
+    branchId: string | null;
+    branchName: string | null;
+    /** Fecha de alta del cliente. El frontend la usa para mostrar el badge "Nuevo". */
+    createdAt: string;
 }
 export interface SendCampaignInput {
     message: string;
     sendToAll?: boolean;
     recipientIds?: string[];
     testPhone?: string;
+    /** Filtra destinatarios por sucursal (vacío/ausente = todas). */
+    branchId?: string;
 }
 export interface CampaignResult {
     total: number;
@@ -41,13 +47,24 @@ export interface PrepareCampaignResult {
     }>;
 }
 export declare class CampaignService {
-    static getRecipients(): Promise<{
+    /**
+     * Filtro de sucursal para los destinatarios:
+     * - Sin branchId (o vacío): todos los clientes.
+     * - Con branchId: solo los clientes de esa sucursal.
+     */
+    private static branchWhere;
+    static getRecipients(branchId?: string): Promise<{
         recipients: CampaignRecipient[];
         total: number;
         withPhone: number;
         withoutPhone: number;
     }>;
     static sendCampaign(input: SendCampaignInput): Promise<CampaignResult>;
+    /**
+     * Mapea un usuario (cliente) al formato de destinatario de la campaña.
+     * Compartido entre el listado y la resolución de destinatarios del envío.
+     */
+    private static toRecipient;
     private static resolveRecipients;
     /**
      * Prepara la campaña sin enviarla: devuelve el mensaje ya renderizado y el

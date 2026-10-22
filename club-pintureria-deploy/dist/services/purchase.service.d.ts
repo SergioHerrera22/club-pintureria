@@ -3,6 +3,7 @@ interface CreatePurchaseDTO {
     clientId: string;
     branchId: string;
     cashierId: string;
+    vendorId?: string;
     items: Array<{
         productId: string;
         quantity: number;

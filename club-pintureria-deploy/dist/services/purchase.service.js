@@ -34,6 +34,19 @@ class PurchaseService {
             const cashier = await tx.user.findUnique({ where: { id: data.cashierId } });
             if (!cashier)
                 throw new errorHandler_1.AppError(404, 'Cajero no encontrado');
+            // 3b. Validar vendedor acreditado (opcional)
+            let vendor = null;
+            if (data.vendorId) {
+                const vendorUser = await tx.user.findUnique({ where: { id: data.vendorId } });
+                if (!vendorUser || !vendorUser.isActive)
+                    throw new errorHandler_1.AppError(400, 'El vendedor indicado no existe o está inactivo');
+                if (vendorUser.role !== 'VENDEDOR')
+                    throw new errorHandler_1.AppError(400, 'El usuario indicado no es vendedor');
+                if (vendorUser.branchId && vendorUser.branchId !== branch.id) {
+                    throw new errorHandler_1.AppError(400, 'El vendedor pertenece a otra sucursal');
+                }
+                vendor = { id: vendorUser.id, firstName: vendorUser.firstName, lastName: vendorUser.lastName };
+            }
             // 4. Validar productos y stock
             const productIds = data.items.map(i => i.productId);
             const products = await tx.product.findMany({
@@ -121,6 +134,7 @@ class PurchaseService {
                     clientId: client.id,
                     branchId: branch.id,
                     cashierId: cashier.id,
+                    vendorId: data.vendorId ?? null,
                     receiptNumber,
                     subtotal,
                     discount: totalDiscount + couponDiscount,

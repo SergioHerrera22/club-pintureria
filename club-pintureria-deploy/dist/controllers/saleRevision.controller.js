@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.rejectRevision = exports.approveRevision = exports.getMyRevisions = exports.listRevisions = exports.requestRevision = exports.getMyPurchases = void 0;
+exports.rejectRevision = exports.approveRevision = exports.getMyRevisions = exports.listRevisions = exports.getVendorsForSale = exports.requestRevision = exports.getMyPurchases = void 0;
 const saleRevision_service_1 = require("../services/saleRevision.service");
 const errorHandler_1 = require("../middleware/errorHandler");
 const getMyPurchases = async (req, res, next) => {
@@ -44,6 +44,18 @@ const requestRevision = async (req, res, next) => {
     }
 };
 exports.requestRevision = requestRevision;
+const getVendorsForSale = async (req, res, next) => {
+    try {
+        if (!req.user)
+            throw new errorHandler_1.AppError(401, 'No autenticado');
+        const vendors = await saleRevision_service_1.SaleRevisionService.getVendorsForSale(req.user);
+        res.json({ vendors });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.getVendorsForSale = getVendorsForSale;
 const listRevisions = async (req, res, next) => {
     try {
         const { status, page = 1, limit = 20 } = req.query;

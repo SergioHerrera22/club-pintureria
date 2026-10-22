@@ -699,6 +699,7 @@ export const registerPurchase = async (req: AuthRequest, res: Response, next: Ne
       clientId: clientUser.id,
       branchId: purchaseBranchId,
       cashierId: req.user!.id,
+      vendorId: req.body.vendorId as string | undefined,
       items: items.map((item: any) => ({
         productId: item.productId,
         quantity: item.quantity || 1,
@@ -928,6 +929,7 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
       clientId: clientUser.id,
       branchId: purchaseBranchId,
       cashierId: req.user!.id,
+      vendorId: req.body.vendorId as string | undefined,
       items: [{
         productId: quickProduct.id,
         quantity: 1,

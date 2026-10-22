@@ -60,6 +60,8 @@ const createPurchaseValidation = zod_1.z.object({
 // no sean interpretados como un id de compra.
 // Ventas propias del usuario (vendedor/cajera/admin)
 router.get('/mine', auth_1.authenticate, (0, auth_1.authorize)('CAJERA', 'ADMIN', 'VENDEDOR'), saleRevisionController.getMyPurchases);
+// Vendedores activos para el selector al registrar una venta (cajera/admin)
+router.get('/vendors', auth_1.authenticate, (0, auth_1.authorize)('CAJERA', 'ADMIN'), saleRevisionController.getVendorsForSale);
 // Solicitudes de revisión (admin)
 router.get('/revisions', auth_1.authenticate, (0, auth_1.authorize)('ADMIN'), saleRevisionController.listRevisions);
 // Estado de mis solicitudes de revisión

@@ -585,6 +585,7 @@ const registerPurchase = async (req, res, next) => {
             clientId: clientUser.id,
             branchId: purchaseBranchId,
             cashierId: req.user.id,
+            vendorId: req.body.vendorId,
             items: items.map((item) => ({
                 productId: item.productId,
                 quantity: item.quantity || 1,
@@ -789,6 +790,7 @@ const registerQuickPurchase = async (req, res, next) => {
             clientId: clientUser.id,
             branchId: purchaseBranchId,
             cashierId: req.user.id,
+            vendorId: req.body.vendorId,
             items: [{
                     productId: quickProduct.id,
                     quantity: 1,

@@ -42,6 +42,16 @@ export const requestRevision = async (req: AuthRequest, res: Response, next: Nex
   }
 };
 
+export const getVendorsForSale = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) throw new AppError(401, 'No autenticado');
+    const vendors = await SaleRevisionService.getVendorsForSale(req.user);
+    res.json({ vendors });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const listRevisions = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { status, page = 1, limit = 20 } = req.query;

@@ -46,6 +46,7 @@ export declare class SaleRevisionService {
                 name: string;
                 code: string;
             };
+            vendorName: string | null;
             itemCount: number;
             items: {
                 productId: string;
@@ -170,6 +171,12 @@ export declare class SaleRevisionService {
         };
         pendingCount: number;
     }>;
+    /** Vendedores activos para el selector al registrar una venta */
+    static getVendorsForSale(user: NonNullable<import('../middleware/auth').AuthRequest['user']>): Promise<{
+        id: string;
+        name: string;
+        dni: string;
+    }[]>;
     /** Solicitudes del propio usuario (con respuesta del admin si fue revisada) */
     static getMyRevisions(userId: string, filters: {
         page?: number;

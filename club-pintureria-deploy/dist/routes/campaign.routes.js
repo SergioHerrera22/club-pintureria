@@ -48,6 +48,7 @@ const sendCampaignSchema = zod_1.z.object({
         sendToAll: zod_1.z.boolean().optional(),
         recipientIds: zod_1.z.array(zod_1.z.string()).optional(),
         testPhone: zod_1.z.string().optional(),
+        branchId: zod_1.z.string().optional(),
     }),
 });
 router.post('/send', (0, auth_1.requireMenuPermission)('campanas'), (0, validation_1.validate)(sendCampaignSchema), campaignController.sendCampaign);

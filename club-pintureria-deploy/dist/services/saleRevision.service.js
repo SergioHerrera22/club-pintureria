@@ -26,7 +26,10 @@ class SaleRevisionService {
      */
     static async getMySales(filters) {
         const { userId, dni, page = 1, limit = 20, startDate, endDate } = filters;
-        const where = { cashierId: userId };
+        const where = {
+            // Ventas registradas por el usuario O acreditadas a él como vendedor
+            OR: [{ cashierId: userId }, { vendorId: userId }],
+        };
         if (dni)
             where.client = { dni: { contains: dni } };
         if (startDate || endDate) {
@@ -45,6 +48,7 @@ class SaleRevisionService {
                 include: {
                     client: { select: { id: true, firstName: true, lastName: true, dni: true } },
                     branch: { select: { id: true, name: true, code: true } },
+                    vendor: { select: { id: true, firstName: true, lastName: true } },
                     items: { include: { product: { select: { name: true, code: true } } } },
                     revisions: {
                         orderBy: { createdAt: 'desc' },
@@ -73,6 +77,7 @@ class SaleRevisionService {
                         dni: p.client.dni,
                     },
                     branch: { id: p.branch.id, name: p.branch.name, code: p.branch.code },
+                    vendorName: p.vendor ? `${p.vendor.firstName} ${p.vendor.lastName}` : null,
                     itemCount: p.items.length,
                     items: p.items.map(i => ({
                         productId: i.productId,
@@ -129,7 +134,7 @@ class SaleRevisionService {
         if (purchase.status !== client_1.PurchaseStatus.COMPLETADA) {
             throw new errorHandler_1.AppError(400, 'La venta no está completada');
         }
-        if (purchase.cashierId !== user.id) {
+        if (purchase.cashierId !== user.id && purchase.vendorId !== user.id) {
             throw new errorHandler_1.AppError(403, 'Sólo podés solicitar revisiones de tus propias ventas');
         }
         // Aislamiento por sucursal (por si el admin pide revisión de otra sucursal ajena)
@@ -357,6 +362,30 @@ class SaleRevisionService {
             pagination: { page: Number(page), limit: Number(limit), total, pages: Math.ceil(total / Number(limit)) },
             pendingCount,
         };
+    }
+    /** Vendedores activos para el selector al registrar una venta */
+    static async getVendorsForSale(user) {
+        const scope = (0, auth_1.resolveBranchScope)(user);
+        const where = {
+            role: 'VENDEDOR',
+            isActive: true,
+        };
+        if (!scope.isGlobal) {
+            // Staff no-admin: solo vendedores de su sucursal (o sin sucursal asignada)
+            if (scope.branchId && scope.branchId !== auth_1.NO_BRANCH) {
+                where.OR = [{ branchId: scope.branchId }, { branchId: null }];
+            }
+        }
+        const vendors = await prisma_1.prisma.user.findMany({
+            where,
+            select: { id: true, firstName: true, lastName: true, dni: true },
+            orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
+        });
+        return vendors.map(v => ({
+            id: v.id,
+            name: `${v.firstName} ${v.lastName}`,
+            dni: v.dni,
+        }));
     }
     /** Solicitudes del propio usuario (con respuesta del admin si fue revisada) */
     static async getMyRevisions(userId, filters) {
