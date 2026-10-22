@@ -17,6 +17,7 @@ const sendCampaignSchema = z.object({
     sendToAll: z.boolean().optional(),
     recipientIds: z.array(z.string()).optional(),
     testPhone: z.string().optional(),
+    branchId: z.string().optional(),
   }),
 });
 

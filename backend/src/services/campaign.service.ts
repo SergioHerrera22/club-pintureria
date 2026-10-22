@@ -10,6 +10,10 @@ export interface CampaignRecipient {
   dni: string;
   phone: string | null;
   currentPoints: number;
+  branchId: string | null;
+  branchName: string | null;
+  /** Fecha de alta del cliente. El frontend la usa para mostrar el badge "Nuevo". */
+  createdAt: string;
 }
 
 export interface SendCampaignInput {
@@ -17,6 +21,8 @@ export interface SendCampaignInput {
   sendToAll?: boolean;
   recipientIds?: string[];
   testPhone?: string;
+  /** Filtra destinatarios por sucursal (vacío/ausente = todas). */
+  branchId?: string;
 }
 
 export interface CampaignResult {
@@ -44,33 +50,39 @@ export interface PrepareCampaignResult {
 }
 
 export class CampaignService {
-  static async getRecipients(): Promise<{
+  /**
+   * Filtro de sucursal para los destinatarios:
+   * - Sin branchId (o vacío): todos los clientes.
+   * - Con branchId: solo los clientes de esa sucursal.
+   */
+  private static branchWhere(branchId?: string): { branchId?: string } {
+    const id = (branchId || '').trim();
+    return id ? { branchId: id } : {};
+  }
+
+  static async getRecipients(branchId?: string): Promise<{
     recipients: CampaignRecipient[];
     total: number;
     withPhone: number;
     withoutPhone: number;
   }> {
     const users = await prisma.user.findMany({
-      where: { role: 'CLIENTE', isActive: true },
+      where: { role: 'CLIENTE', isActive: true, ...this.branchWhere(branchId) },
       select: {
         id: true,
         firstName: true,
         lastName: true,
         dni: true,
         phone: true,
+        createdAt: true,
+        branchId: true,
+        branch: { select: { name: true } },
         clientProfile: { select: { currentPoints: true } },
       },
       orderBy: [{ firstName: 'asc' }, { lastName: 'asc' }],
     });
 
-    const recipients: CampaignRecipient[] = users.map((u) => ({
-      id: u.id,
-      firstName: u.firstName,
-      lastName: u.lastName,
-      dni: u.dni,
-      phone: u.phone,
-      currentPoints: u.clientProfile?.currentPoints ?? 0,
-    }));
+    const recipients: CampaignRecipient[] = users.map((u) => this.toRecipient(u));
 
     const withPhone = recipients.filter((r) => !!r.phone && r.phone.trim().length > 0).length;
 
@@ -153,32 +165,56 @@ export class CampaignService {
     return result;
   }
 
+  /**
+   * Mapea un usuario (cliente) al formato de destinatario de la campaña.
+   * Compartido entre el listado y la resolución de destinatarios del envío.
+   */
+  private static toRecipient(u: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    dni: string;
+    phone: string | null;
+    createdAt: Date;
+    branchId: string | null;
+    branch?: { name: string } | null;
+    clientProfile?: { currentPoints: number } | null;
+  }): CampaignRecipient {
+    return {
+      id: u.id,
+      firstName: u.firstName,
+      lastName: u.lastName,
+      dni: u.dni,
+      phone: u.phone,
+      currentPoints: u.clientProfile?.currentPoints ?? 0,
+      branchId: u.branchId,
+      branchName: u.branch?.name ?? null,
+      createdAt: u.createdAt.toISOString(),
+    };
+  }
+
   private static async resolveRecipients(input: SendCampaignInput): Promise<CampaignRecipient[]> {
     if (input.sendToAll) {
-      const data = await this.getRecipients();
+      const data = await this.getRecipients(input.branchId);
       return data.recipients;
     }
 
     if (input.recipientIds && input.recipientIds.length > 0) {
       const users = await prisma.user.findMany({
-        where: { id: { in: input.recipientIds }, role: 'CLIENTE' },
+        where: { id: { in: input.recipientIds }, role: 'CLIENTE', ...this.branchWhere(input.branchId) },
         select: {
           id: true,
           firstName: true,
           lastName: true,
           dni: true,
           phone: true,
+          createdAt: true,
+          branchId: true,
+          branch: { select: { name: true } },
           clientProfile: { select: { currentPoints: true } },
         },
       });
-      return users.map((u) => ({
-        id: u.id,
-        firstName: u.firstName,
-        lastName: u.lastName,
-        dni: u.dni,
-        phone: u.phone,
-        currentPoints: u.clientProfile?.currentPoints ?? 0,
-      }));
+      return users.map((u) => this.toRecipient(u));
     }
 
     throw new AppError(400, 'Seleccioná al menos un destinatario o elegí "todos los clientes"');

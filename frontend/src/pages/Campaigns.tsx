@@ -13,7 +13,26 @@ interface CampaignRecipient {
   dni: string;
   phone: string | null;
   currentPoints: number;
+  branchId: string | null;
+  branchName: string | null;
+  createdAt: string;
 }
+
+interface BranchOption {
+  id: string;
+  name: string;
+}
+
+/** Indica si una fecha corresponde al día de hoy (hora local del navegador). */
+const isToday = (date: string | Date): boolean => {
+  const d = new Date(date);
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+};
 
 interface RecipientsResponse {
   recipients: CampaignRecipient[];
@@ -76,10 +95,16 @@ export default function Campaigns() {
   const [queue, setQueue] = useState<SendQueue | null>(null);
   const [error, setError] = useState('');
 
-  const fetchRecipients = async () => {
+  /** Filtro de sucursal: '' = todas las sucursales */
+  const [branchId, setBranchId] = useState('');
+  const [branches, setBranches] = useState<BranchOption[]>([]);
+
+  const fetchRecipients = async (filterBranchId = branchId) => {
     setLoadingRecipients(true);
     try {
-      const res = await api.get<RecipientsResponse>('/campaigns/recipients');
+      const res = await api.get<RecipientsResponse>('/campaigns/recipients', {
+        params: filterBranchId ? { branchId: filterBranchId } : {},
+      });
       setRecipients(res.data.recipients);
       setStats({ total: res.data.total, withPhone: res.data.withPhone, withoutPhone: res.data.withoutPhone });
     } catch (err: any) {
@@ -98,10 +123,28 @@ export default function Campaigns() {
     }
   };
 
+  const fetchBranches = async () => {
+    try {
+      const res = await api.get<{ branches: BranchOption[] }>('/branches?isActive=true&limit=100');
+      setBranches(res.data.branches);
+    } catch {
+      // ignore: sin sucursales el filtro queda en "todas"
+    }
+  };
+
   useEffect(() => {
-    fetchRecipients();
     fetchTemplates();
+    fetchBranches();
   }, []);
+
+  // Recarga los destinatarios al cambiar el filtro de sucursal.
+  // Se limpia la selección para no mandarle la campaña a clientes de otra sucursal.
+  useEffect(() => {
+    setSelectedIds([]);
+    fetchRecipients(branchId);
+  }, [branchId]);
+
+  const selectedBranchName = branchId ? branches.find((b) => b.id === branchId)?.name ?? '' : '';
 
   const filteredRecipients = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -153,11 +196,14 @@ export default function Campaigns() {
     }
 
     const isTest = testPhone.trim().length > 0;
+    const branchScope = selectedBranchName ? ` de la sucursal "${selectedBranchName}"` : '';
     if (
       !isTest &&
       !confirm(
         `¿Abrir WhatsApp Web para enviar este mensaje a ${
-          mode === 'all' ? `TODOS los clientes con WhatsApp (${stats.withPhone})` : `${selectedIds.length} cliente(s)`
+          mode === 'all'
+            ? `TODOS los clientes${branchScope} con WhatsApp (${stats.withPhone})`
+            : `${selectedIds.length} cliente(s)`
         }?`
       )
     ) {
@@ -171,6 +217,7 @@ export default function Campaigns() {
         sendToAll: !isTest && mode === 'all',
         recipientIds: !isTest && mode === 'selected' ? selectedIds : undefined,
         testPhone: isTest ? testPhone.trim() : undefined,
+        branchId: branchId || undefined,
       });
 
       if (res.data.messages.length === 0) {
@@ -340,6 +387,21 @@ export default function Campaigns() {
                 <Users className="w-5 h-5 text-primary-600" /> Destinatarios
               </h2>
 
+              <div>
+                <label className="label" htmlFor="campaign-branch">Filtrar por sucursal</label>
+                <select
+                  id="campaign-branch"
+                  value={branchId}
+                  onChange={(e) => setBranchId(e.target.value)}
+                  className="input text-sm"
+                >
+                  <option value="">Todas las sucursales</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
@@ -349,7 +411,9 @@ export default function Campaigns() {
                     mode === 'all' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
                   )}
                 >
-                  <p className="font-medium text-gray-900">Todos los clientes</p>
+                  <p className="font-medium text-gray-900">
+                    Todos los clientes{selectedBranchName ? ` · ${selectedBranchName}` : ''}
+                  </p>
                   <p className="text-xs text-gray-500">{stats.withPhone} con WhatsApp · {stats.withoutPhone} sin teléfono</p>
                 </button>
                 <button
@@ -405,8 +469,21 @@ export default function Campaigns() {
                             className="rounded border-gray-300"
                           />
                           <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-gray-900 truncate">{r.firstName} {r.lastName}</p>
-                            <p className="text-xs text-gray-500">DNI {r.dni}{r.phone ? ` · ${r.phone}` : ' · sin teléfono'}</p>
+                            <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                              <span className="truncate">{r.firstName} {r.lastName}</span>
+                              {isToday(r.createdAt) && (
+                                <span
+                                  className="inline-flex items-center flex-shrink-0 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide bg-green-100 text-green-700 border border-green-200 rounded-full"
+                                  title="Cliente cargado hoy"
+                                >
+                                  Nuevo
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              DNI {r.dni}{r.phone ? ` · ${r.phone}` : ' · sin teléfono'}
+                              {!branchId && r.branchName ? ` · ${r.branchName}` : ''}
+                            </p>
                           </div>
                           <span className="text-xs text-primary-600 font-medium">{formatNumber(r.currentPoints)} pts</span>
                         </label>

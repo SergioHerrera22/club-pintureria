@@ -1,0 +1,508 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String               @id @default(cuid())
+  email               String               @unique
+  passwordHash        String
+  role                UserRole             @default(CLIENTE)
+  firstName           String
+  lastName            String
+  phone               String?
+  dni                 String               @unique
+  birthDate           DateTime?
+  isActive            Boolean              @default(true)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  branchId            String?
+  /// Permisos de menú personalizados. null = usar permisos por defecto del rol.
+  /// Si es un array, solo esas secciones del menú están habilitadas (ADMIN siempre tiene acceso total).
+  permissions         Json?
+  challengeProgress   ChallengeProgress[]
+  clientProfile       ClientProfile?
+  coupons             Coupon[]
+  qr                  CustomerQR?
+  notifications       Notification[]
+  professionalProfile ProfessionalProfile?
+  cashierPurchases    Purchase[]           @relation("PurchaseCashier")
+  purchases           Purchase[]           @relation("PurchaseClient")
+  redemptions         Redemption[]
+  transactions        Transaction[]
+  branch              Branch?              @relation(fields: [branchId], references: [id])
+  saleRevisionsRequested SaleRevision[]    @relation("SaleRevisionRequestedBy")
+  saleRevisionsReviewed  SaleRevision[]    @relation("SaleRevisionReviewedBy")
+
+  @@index([dni])
+  @@index([email])
+  @@index([role])
+  @@index([branchId])
+}
+
+model ClientProfile {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  currentPoints       Int       @default(0)
+  totalPointsEarned   Int       @default(0)
+  totalPointsRedeemed Int       @default(0)
+  lastPurchaseAt      DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Product {
+  id               String            @id @default(cuid())
+  code             String            @unique
+  name             String
+  description      String?
+  category         String
+  brand            String?
+  unitPrice        Decimal           @db.Decimal(10, 2)
+  isActive         Boolean           @default(true)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  brandId          String?
+  categoryId       String?
+  brandRel         Brand?            @relation(fields: [brandId], references: [id])
+  categoryRel      Category?         @relation(fields: [categoryId], references: [id])
+  purchaseItems    PurchaseItem[]
+  transactionItems TransactionItem[]
+  pointRules       PointRule[]       @relation("PointRuleToProduct")
+
+  @@index([brandId])
+  @@index([categoryId])
+}
+
+model PointRule {
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  type        RuleType
+  config      Json
+  priority    Int       @default(0)
+  isActive    Boolean   @default(true)
+  validFrom   DateTime?
+  validTo     DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[] @relation("PointRuleToProduct")
+}
+
+model Transaction {
+  id            String            @id @default(cuid())
+  userId        String
+  type          TransactionType   @default(COMPRA)
+  subtotal      Decimal           @db.Decimal(10, 2)
+  tax           Decimal           @default(0) @db.Decimal(10, 2)
+  total         Decimal           @db.Decimal(10, 2)
+  pointsEarned  Int               @default(0)
+  pointsBalance Int               @default(0)
+  description   String?
+  cashierId     String?
+  createdAt     DateTime          @default(now())
+  user          User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items         TransactionItem[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([type])
+}
+
+model TransactionItem {
+  id            String      @id @default(cuid())
+  transactionId String
+  productId     String
+  quantity      Int
+  unitPrice     Decimal     @db.Decimal(10, 2)
+  lineTotal     Decimal     @db.Decimal(10, 2)
+  pointsEarned  Int         @default(0)
+  product       Product     @relation(fields: [productId], references: [id])
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+}
+
+model Prize {
+  id          String       @id @default(cuid())
+  code        String       @unique
+  name        String
+  description String?
+  imageUrl    String?
+  pointsCost  Int
+  stock       Int          @default(0)
+  status      PrizeStatus  @default(DISPONIBLE)
+  category    String
+  isActive    Boolean      @default(true)
+  validFrom   DateTime?
+  validTo     DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  redemptions Redemption[]
+}
+
+model Redemption {
+  id          String    @id @default(cuid())
+  userId      String
+  prizeId     String
+  pointsSpent Int
+  status      String    @default("PENDIENTE")
+  notes       String?
+  processedBy String?
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+  prize       Prize     @relation(fields: [prizeId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  metadata  Json?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+}
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Promotion {
+  id          String        @id @default(cuid())
+  name        String
+  description String?
+  imageUrl    String?
+  type        PromotionType
+  multiplier  Float         @default(1)
+  bonusPoints Int           @default(0)
+  discount    Float?
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean       @default(true)
+  categories  String[]
+  brands      String[]
+  products    String[]
+  conditions  Json?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  coupons     Coupon[]
+
+  @@index([isActive, startDate, endDate])
+}
+
+model Coupon {
+  id          String     @id @default(cuid())
+  code        String     @unique
+  name        String
+  description String?
+  type        CouponType
+  value       Float
+  maxUses     Int?
+  usedCount   Int        @default(0)
+  startDate   DateTime
+  endDate     DateTime
+  isActive    Boolean    @default(true)
+  clientId    String?
+  promotionId String?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  client      User?      @relation(fields: [clientId], references: [id])
+  promotion   Promotion? @relation(fields: [promotionId], references: [id])
+
+  @@index([code])
+  @@index([clientId])
+}
+
+model Challenge {
+  id           String              @id @default(cuid())
+  name         String
+  description  String
+  imageUrl     String?
+  type         ChallengeType
+  target       Int
+  condition    Json
+  rewardPoints Int
+  rewardCoupon String?
+  startDate    DateTime
+  endDate      DateTime
+  isActive     Boolean             @default(true)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+  progress     ChallengeProgress[]
+
+  @@index([isActive, startDate, endDate])
+}
+
+model ChallengeProgress {
+  id           String    @id @default(cuid())
+  clientId     String
+  challengeId  String
+  currentValue Int       @default(0)
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  client       User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, challengeId])
+  @@index([clientId, completed])
+}
+
+model Benefit {
+  id           String      @id @default(cuid())
+  name         String
+  description  String
+  imageUrl     String?
+  type         BenefitType
+  value        Float
+  isActive     Boolean     @default(true)
+  startDate    DateTime?
+  endDate      DateTime?
+  autoApply    Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([isActive])
+}
+
+model CustomerQR {
+  id        String    @id @default(cuid())
+  clientId  String    @unique
+  token     String    @unique @default(cuid())
+  isActive  Boolean   @default(true)
+  expiresAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  client    User      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+model Branch {
+  id        String     @id @default(cuid())
+  name      String
+  code      String     @unique
+  address   String
+  phone     String?
+  email     String?
+  isActive  Boolean    @default(true)
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  purchases Purchase[]
+  users     User[]
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  name        String    @unique
+  code        String    @unique
+  description String?
+  logoUrl     String?
+  isActive    Boolean   @default(true)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  products    Product[]
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  code        String     @unique
+  description String?
+  parentId    String?
+  isActive    Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+}
+
+model ProfessionalProfile {
+  id                  String   @id @default(cuid())
+  clientId            String   @unique
+  specialty           String?
+  company             String?
+  position            String?
+  location            String?
+  phone               String?
+  website             String?
+  socialMedia         Json?
+  preferredBrands     String[]
+  preferredCategories String[]
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+  client              User     @relation(fields: [clientId], references: [id], onDelete: Cascade)
+}
+
+model Purchase {
+  id            String         @id @default(cuid())
+  clientId      String
+  branchId      String
+  cashierId     String
+  receiptNumber String         @unique
+  subtotal      Decimal        @db.Decimal(12, 2)
+  discount      Decimal        @default(0) @db.Decimal(12, 2)
+  tax           Decimal        @db.Decimal(12, 2)
+  total         Decimal        @db.Decimal(12, 2)
+  pointsEarned  Int            @default(0)
+  pointsBalance Int            @default(0)
+  promotionIds  String[]
+  couponId      String?
+  status        PurchaseStatus @default(COMPLETADA)
+  notes         String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  branch        Branch         @relation(fields: [branchId], references: [id])
+  cashier       User           @relation("PurchaseCashier", fields: [cashierId], references: [id])
+  client        User           @relation("PurchaseClient", fields: [clientId], references: [id])
+  items         PurchaseItem[]
+  revisions     SaleRevision[]
+
+  @@index([clientId, createdAt])
+  @@index([branchId, createdAt])
+  @@index([receiptNumber])
+  @@index([cashierId, createdAt])
+}
+
+model PurchaseItem {
+  id           String   @id @default(cuid())
+  purchaseId   String
+  productId    String
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(12, 2)
+  discount     Decimal  @default(0) @db.Decimal(12, 2)
+  lineTotal    Decimal  @db.Decimal(12, 2)
+  pointsEarned Int      @default(0)
+  promotionIds String[]
+  product      Product  @relation(fields: [productId], references: [id])
+  purchase     Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+}
+
+enum UserRole {
+  ADMIN
+  CAJERA
+  VENDEDOR
+  CLIENTE
+}
+
+enum SaleRevisionStatus {
+  PENDIENTE
+  APROBADA
+  RECHAZADA
+}
+
+/// Solicitud de corrección de una venta hecha por el vendedor/cajera.
+/// El vendedor propone cambios (items, cliente, notas) con una observación;
+/// el administrador los aprueba (se aplican) o los rechaza (queda constancia).
+model SaleRevision {
+  id            String             @id @default(cuid())
+  purchaseId    String
+  requestedById String
+  status        SaleRevisionStatus @default(PENDIENTE)
+  /// Cambios propuestos: { items: [{productId, quantity, discount?}], newClientDni?, notes? }
+  changes       Json
+  /// Snapshot del estado original de la venta al momento de la solicitud
+  originalData  Json
+  /// Motivo del vendedor para pedir la corrección
+  observation   String
+  /// Preview calculado al crear la solicitud: { subtotal, discount, tax, total, pointsEarned, pointsDelta }
+  preview       Json?
+  /// Motivo por el cual el administrador rechazó la solicitud
+  adminResponse String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  purchase      Purchase           @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  requestedBy   User               @relation("SaleRevisionRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy    User?              @relation("SaleRevisionReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([purchaseId])
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+}
+
+enum TransactionType {
+  COMPRA
+  CANJE
+  AJUSTE_MANUAL
+  BONIFICACION
+  VENCIMIENTO
+}
+
+enum RuleType {
+  POR_MONTO
+  POR_PRODUCTO
+  POR_CATEGORIA
+  PRIMERA_COMPRA
+  CUMPLEANOS
+  RANGO_MONTO
+}
+
+enum PrizeStatus {
+  DISPONIBLE
+  AGOTADO
+  DESCONTINUADO
+}
+
+enum PromotionType {
+  DOBLE_PUNTOS
+  TRIPLE_PUNTOS
+  PUNTOS_EXTRA
+  DESCUENTO_PORCENTUAL
+  PRODUCTO_BONIFICADO
+  ENVIO_GRATIS
+}
+
+enum CouponType {
+  DESCUENTO_PORCENTUAL
+  PUNTOS_BONUS
+  PRODUCTO_GRATIS
+  ENVIO_GRATIS
+}
+
+enum ChallengeType {
+  CANTIDAD_PRODUCTOS
+  CANTIDAD_COMPRAS
+  MARCAS_DIFERENTES
+  CATEGORIAS_DIFERENTES
+  MONTO_ACUMULADO
+  FRECUENCIA_COMPRA
+}
+
+enum BenefitType {
+  DESCUENTO_PORCENTUAL
+  ENVIO_GRATIS
+  MULTIPLICADOR_PUNTOS
+  PRODUCTO_BONIFICADO
+  ACCESO_ANTICIPADO
+  REGALO_CUMPLEANOS
+  ATENCION_PRIORITARIA
+}
+
+enum PurchaseStatus {
+  PENDIENTE
+  COMPLETADA
+  CANCELADA
+  DEVUELTA
+}
