@@ -8,7 +8,12 @@ export interface WhatsAppTemplates {
     campaign_default: string;
 }
 /**
- * Plantillas por defecto (v2). Formato de WhatsApp: *negrita*, listas con
+ * Plataforma del club: el link que se comparte en los mensajes para que el
+ * cliente vea sus puntos y consulte todo sobre el club.
+ */
+export declare const PLATFORM_URL = "https://club.roblespinturerias.com/";
+/**
+ * Plantillas por defecto (v3). Formato de WhatsApp: *negrita*, listas con
  * emojis y saltos de línea con \n. Variables disponibles por plantilla:
  * - points_earned: {nombre} {puntos} {total} {monto} {ticket} {sucursal} {fecha} {empresa}
  * - welcome: {nombre} {empresa}

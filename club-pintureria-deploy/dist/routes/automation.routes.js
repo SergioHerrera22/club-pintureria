@@ -44,10 +44,9 @@ router.post('/welcome-email', auth_1.authenticate, (0, auth_1.authorize)('ADMIN'
         if (!user.email)
             throw new Error('Cliente sin email');
         await email_service_1.emailService.sendWelcomeEmail(user.email, user.firstName);
-        // Send WhatsApp welcome
+        // Send WhatsApp welcome (usa la plantilla de bienvenida: marca y link del club)
         if (user.phone) {
-            const body = `👋 *¡Bienvenido ${user.firstName} a Club Robles!*\n\nTu cuenta está lista para empezar a ganar puntos en cada compra. Presentá tu DNI en la sucursal y comenzá a sumar.\n\nClub Robles 🎨`;
-            await whatsapp_service_1.whatsappService.sendMessage(user.phone, body);
+            await whatsapp_service_1.whatsappService.sendWelcomeNotification(user.phone, user.firstName);
         }
         res.json({ message: 'Email de bienvenida enviado' });
     }

@@ -45,10 +45,9 @@ router.post('/welcome-email', authenticate, authorize('ADMIN'), validate(z.objec
     
     await emailService.sendWelcomeEmail(user.email, user.firstName);
     
-    // Send WhatsApp welcome
+    // Send WhatsApp welcome (usa la plantilla de bienvenida: marca y link del club)
     if (user.phone) {
-      const body = `👋 *¡Bienvenido ${user.firstName} a Club Robles!*\n\nTu cuenta está lista para empezar a ganar puntos en cada compra. Presentá tu DNI en la sucursal y comenzá a sumar.\n\nClub Robles 🎨`;
-      await whatsappService.sendMessage(user.phone, body);
+      await whatsappService.sendWelcomeNotification(user.phone, user.firstName);
     }
     
     res.json({ message: 'Email de bienvenida enviado' });

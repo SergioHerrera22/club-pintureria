@@ -133,7 +133,7 @@ export const initializeDefaultConfigs = async (req: AuthRequest, res: Response, 
       },
       {
         key: 'company_name',
-        value: { name: 'Club Robles' },
+        value: { name: 'Robles Pinturerias' },
         description: 'Nombre de la empresa para comunicaciones',
       },
       {

@@ -131,7 +131,7 @@ const initializeDefaultConfigs = async (req, res, next) => {
             },
             {
                 key: 'company_name',
-                value: { name: 'Club Robles' },
+                value: { name: 'Robles Pinturerias' },
                 description: 'Nombre de la empresa para comunicaciones',
             },
             {
