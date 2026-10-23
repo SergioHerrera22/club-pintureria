@@ -14,6 +14,7 @@ interface AuthState {
   register: (data: RegisterData) => Promise<void>;
   clientPortalLogin: (data: ClientPortalLoginData) => Promise<void>;
   clientPortalClaim: (data: ClientPortalClaimData) => Promise<void>;
+  clientPortalRecover: (data: ClientPortalClaimData) => Promise<void>;
   clientPortalRegister: (data: ClientPortalRegisterData) => Promise<void>;
   logout: () => void;
   refreshUser: () => Promise<void>;
@@ -128,6 +129,20 @@ export const useAuthStore = create<AuthState>()(
         set({ isLoading: true });
         try {
           const response = await api.post<AuthResponse>('/client-portal/claim', data);
+          const { user, accessToken, refreshToken } = response.data;
+          get().setTokens(accessToken, refreshToken);
+          set({ user, isLoading: false });
+          get().startAutoRefresh(10_000);
+        } catch (error) {
+          set({ isLoading: false });
+          throw error;
+        }
+      },
+
+      clientPortalRecover: async (data) => {
+        set({ isLoading: true });
+        try {
+          const response = await api.post<AuthResponse>('/client-portal/recover-password', data);
           const { user, accessToken, refreshToken } = response.data;
           get().setTokens(accessToken, refreshToken);
           set({ user, isLoading: false });

@@ -74,8 +74,18 @@ const portalRegisterSchema = z.object({
   }),
 });
 
+const portalRecoverSchema = z.object({
+  body: z.object({
+    dni: z.string().min(6).max(12),
+    password: z.string().min(6, 'La contraseña debe tener al menos 6 caracteres').max(72),
+    phone: z.string().max(30).optional(),
+    email: z.string().email('Email inválido').optional().or(z.literal('')),
+  }),
+});
+
 router.post('/check', portalRateLimit(30, 15 * 60 * 1000), validate(dniSchema), clientPortalController.checkDni);
 router.post('/claim', portalRateLimit(10, 15 * 60 * 1000), validate(claimSchema), clientPortalController.claimAccount);
+router.post('/recover-password', portalRateLimit(10, 15 * 60 * 1000), validate(portalRecoverSchema), clientPortalController.recoverClientPassword);
 router.post('/login', portalRateLimit(15, 15 * 60 * 1000), validate(portalLoginSchema), clientPortalController.loginClient);
 router.post('/register', portalRateLimit(10, 15 * 60 * 1000), validate(portalRegisterSchema), clientPortalController.registerClient);
 

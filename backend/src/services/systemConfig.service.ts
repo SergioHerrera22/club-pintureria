@@ -25,6 +25,10 @@ export interface WhatsAppTemplates {
   redemption: string;
   points_expiring: string;
   campaign_default: string;
+  /** Audiencia: clientes a pocos puntos de un premio */
+  premio_cerca: string;
+  /** Audiencia: resumen de los últimos días del cliente */
+  resumen_semanal: string;
 }
 
 /**
@@ -41,6 +45,8 @@ export const PLATFORM_URL = 'https://club.roblespinturerias.com/';
  * - redemption: {nombre} {premio} {puntos} {total} {empresa}
  * - points_expiring: {nombre} {puntos} {dias} {empresa}
  * - campaign_default: {nombre} {apellido} {dni} {puntos} {total} {empresa}
+ * - premio_cerca: {nombre} {premio} {faltan} {total} {empresa}
+ * - resumen_semanal: {nombre} {compras_semana} {puntos_semana} {periodo} {total} {empresa}
  */
 export const DEFAULT_WHATSAPP_TEMPLATES: WhatsAppTemplates = {
   points_earned:
@@ -53,6 +59,10 @@ export const DEFAULT_WHATSAPP_TEMPLATES: WhatsAppTemplates = {
     `⏳ *{empresa}*\n\nHola {nombre}: tus *{puntos} puntos* vencen en *{dias} días* por inactividad.\n\nHacé una compra para mantenerlos activos o canjealos ahora por premios.\n\n🌐 Ingresá con tu DNI y mirá tu saldo:\n${PLATFORM_URL}\n\n{empresa}`,
   campaign_default:
     `¡Hola {nombre}! 👋\n\n¡Tenemos novedades para vos en *{empresa}*!\n\nMirá lo nuevo y acercate a conocerlo.\n\n🌐 Ingresá con tu DNI y mirá tus puntos y promociones:\n${PLATFORM_URL}\n\n{empresa}`,
+  premio_cerca:
+    `¡Hola {nombre}! 🎁\n\nEstás a un paso: te faltan *{faltan} puntos* para llevarte *{premio}*.\n\nYa tenés *{total} puntos* acumulados.\n\n🌐 Mirá tus premios y tu saldo:\n${PLATFORM_URL}\n\n¡Una compra más y es tuyo!\n\n{empresa}`,
+  resumen_semanal:
+    `¡Hola {nombre}! 📊\n\nResumen de los últimos {periodo} días:\n✅ {compras_semana} compra(s)\n✅ {puntos_semana} puntos sumados\n\n💰 Saldo acumulado: *{total} puntos*\n\n🌐 Ingresá con tu DNI y mirá tus puntos:\n${PLATFORM_URL}\n\n{empresa}`,
 };
 
 /**

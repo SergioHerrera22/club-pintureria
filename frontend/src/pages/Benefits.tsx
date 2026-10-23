@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Plus, Search, Edit, Trash2, Loader2, Shield, Sparkles, Gift, Zap, Calendar, CheckCircle, ChevronRight, Crown, Send } from 'lucide-react';
 
 const benefitTypeSchema = z.enum(['DESCUENTO_PORCENTUAL', 'ENVIO_GRATIS', 'MULTIPLICADOR_PUNTOS', 'PRODUCTO_BONIFICADO', 'ACCESO_ANTICIPADO', 'REGALO_CUMPLEANOS', 'ATENCION_PRIORITARIA']);
@@ -67,6 +68,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function Benefits() {
+  const { toast } = useToast();
   const [benefits, setBenefits] = useState<Benefit[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -127,7 +129,7 @@ export default function Benefits() {
       form.reset({ name: '', description: '', imageUrl: '', type: 'DESCUENTO_PORCENTUAL' as const, value: 0, isActive: true, startDate: '', endDate: '', autoApply: false });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al guardar');
+      toast('error', err.response?.data?.error || 'Error al guardar');
     } finally {
       setSaving(false);
     }

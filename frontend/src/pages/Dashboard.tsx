@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore';
 import api from '../lib/api';
 import { DashboardStats } from '../types';
 import { cn, formatCurrency, formatNumber, formatDate } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Users, ShoppingCart, Award, TrendingUp, Plus, Receipt, Target, UserPlus } from 'lucide-react';
 
 import { ResponsiveContainer, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
@@ -86,6 +87,7 @@ interface CashierSale {
 }
 
 export default function Dashboard() {
+  const { toast } = useToast();
   const navigate = useNavigate();
   const { user } = useAuthStore();
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -288,7 +290,7 @@ export default function Dashboard() {
       window.URL.revokeObjectURL(url);
     } catch (err) {
       console.error('Export error:', err);
-      alert('Error al generar el reporte. Verifica la consola.');
+      toast('error', 'Error al generar el reporte. Verifica la consola.');
     } finally {
       setExporting(false);
     }

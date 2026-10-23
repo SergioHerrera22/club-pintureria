@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { useAuthStore } from '../stores/authStore';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { User, Mail, Phone, Calendar, Lock, Save, Loader2, CheckCircle } from 'lucide-react';
 
 const profileSchema = z.object({
@@ -26,6 +27,7 @@ type ProfileForm = z.infer<typeof profileSchema>;
 type PasswordForm = z.infer<typeof passwordSchema>;
 
 export default function Profile() {
+  const { toast } = useToast();
   const { user, updateProfile, changePassword, refreshUser } = useAuthStore();
   const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile');
   const [saving, setSaving] = useState(false);
@@ -55,7 +57,7 @@ export default function Profile() {
       setSuccess('Perfil actualizado correctamente');
     } catch (err: any) {
       setSuccess('');
-      alert(err.response?.data?.error || 'Error al actualizar');
+      toast('error', err.response?.data?.error || 'Error al actualizar');
     } finally {
       setSaving(false);
     }
@@ -70,7 +72,7 @@ export default function Profile() {
       setSuccess('Contraseña cambiada correctamente');
     } catch (err: any) {
       setSuccess('');
-      alert(err.response?.data?.error || 'Error al cambiar contraseña');
+      toast('error', err.response?.data?.error || 'Error al cambiar contraseña');
     } finally {
       setSaving(false);
     }

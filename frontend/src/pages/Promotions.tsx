@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Plus, Search, Edit, Trash2, Loader2, Megaphone, Zap, Award, Gift, Sparkles, Ticket, ToggleLeft, ToggleRight } from 'lucide-react';
 
 const promotionTypeSchema = z.enum(['DOBLE_PUNTOS', 'TRIPLE_PUNTOS', 'PUNTOS_EXTRA', 'DESCUENTO_PORCENTUAL', 'PRODUCTO_BONIFICADO', 'ENVIO_GRATIS']);
@@ -74,6 +75,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function Promotions() {
+  const { toast } = useToast();
   const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
@@ -151,7 +153,7 @@ export default function Promotions() {
       form.reset({ name: '', description: '', imageUrl: '', type: 'DOBLE_PUNTOS' as const, multiplier: 1, bonusPoints: 0, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], isActive: true, categories: [], brands: [], products: [] });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al guardar');
+      toast('error', err.response?.data?.error || 'Error al guardar');
     } finally {
       setSaving(false);
     }

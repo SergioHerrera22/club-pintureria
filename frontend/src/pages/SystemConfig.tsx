@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Search, Edit, Loader2, Settings, RefreshCw, Award, Mail } from 'lucide-react';
 
 const systemConfigSchema = z.object({
@@ -100,6 +101,7 @@ const isValidJson = (str: string): boolean => {
 };
 
 export default function SystemConfig() {
+  const { toast } = useToast();
   const [configs, setConfigs] = useState<SystemConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -141,7 +143,7 @@ export default function SystemConfig() {
       try {
         JSON.parse(jsonDraft);
       } catch {
-        alert('El JSON ingresado no es válido. Corrígelo antes de guardar.');
+        toast('error', 'El JSON ingresado no es válido. Corrígelo antes de guardar.');
         return;
       }
     }
@@ -162,7 +164,7 @@ export default function SystemConfig() {
       form.reset({ key: '', value: {}, description: '' });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al guardar');
+      toast('error', err.response?.data?.error || 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -175,7 +177,7 @@ export default function SystemConfig() {
       await api.post('/system-config/initialize-defaults');
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al inicializar');
+      toast('error', err.response?.data?.error || 'Error al inicializar');
     } finally {
       setSaving(false);
     }

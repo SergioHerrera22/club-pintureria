@@ -4,7 +4,10 @@ import { useEffect } from 'react';
 import { getHomeForRole } from './lib/utils';
 import { hasMenuPermission, getHomeForUser } from './lib/permissions';
 import Layout from './components/Layout';
+import ClientTabBar from './components/ClientTabBar';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import ClientPortal from './pages/ClientPortal';
 import Dashboard from './pages/Dashboard';
 import Clients from './pages/Clients';
@@ -24,6 +27,7 @@ import ClientPurchases from './pages/ClientPurchases';
 import ClientProfessional from './pages/ClientProfessional';
 import ClientPrizes from './pages/ClientPrizes';
 import ClientPointsHistory from './pages/ClientPointsHistory';
+import ClientProfile from './pages/ClientProfile';
 import Sales from './pages/Sales';
 import MisVentas from './pages/MisVentas';
 import SaleRevisions from './pages/SaleRevisions';
@@ -75,6 +79,19 @@ function PublicRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Layout del portal del cliente: agrega la barra de navegación inferior
+ * y el padding inferior para que no tape el contenido de cada página.
+ */
+function ClientAppLayout() {
+  return (
+    <div className="min-h-screen pb-16">
+      <Outlet />
+      <ClientTabBar />
+    </div>
+  );
+}
+
 function RootRedirect() {
   const { isAuthenticated, user } = useAuthStore();
   if (!isAuthenticated) {
@@ -95,6 +112,8 @@ function App() {
   return (
     <Routes>
       <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
+      <Route path="/forgot-password" element={<PublicRoute><ForgotPassword /></PublicRoute>} />
+      <Route path="/reset-password" element={<PublicRoute><ResetPassword /></PublicRoute>} />
       {/* Portal de clientes: alta y login autogestionados por DNI */}
       <Route path="/users" element={<PublicRoute><ClientPortal /></PublicRoute>} />
       
@@ -135,8 +154,8 @@ function App() {
         <Route path="/profile" element={<Profile />} />
       </Route>
       
-      {/* Client app routes - no Layout, full screen */}
-      <Route element={<ProtectedRoute allowedRoles={['CLIENTE']}><Outlet /></ProtectedRoute>}>
+      {/* Client app routes - no Layout, full screen; con barra de navegación inferior */}
+      <Route element={<ProtectedRoute allowedRoles={['CLIENTE']}><ClientAppLayout /></ProtectedRoute>}>
         <Route path="/app/home" element={<ClientHome />} />
         <Route path="/app/prizes" element={<ClientPrizes />} />
         <Route path="/app/points" element={<ClientPointsHistory />} />
@@ -146,6 +165,7 @@ function App() {
         <Route path="/app/qr" element={<ClientQR />} />
         <Route path="/app/purchases" element={<ClientPurchases />} />
         <Route path="/app/professional" element={<ClientProfessional />} />
+        <Route path="/app/profile" element={<ClientProfile />} />
       </Route>
       
       {/* Public client points lookup */}

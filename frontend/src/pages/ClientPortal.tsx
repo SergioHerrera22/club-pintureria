@@ -17,7 +17,7 @@ import {
   UserPlus,
 } from 'lucide-react';
 
-type PortalStep = 'dni' | 'claim' | 'login' | 'register';
+type PortalStep = 'dni' | 'claim' | 'login' | 'register' | 'recover';
 
 interface CheckResponse {
   status: 'NOT_FOUND' | 'NEEDS_PASSWORD' | 'READY';
@@ -29,7 +29,7 @@ const cleanDni = (raw: string) => raw.replace(/[.\-\s]/g, '');
 
 export default function ClientPortal() {
   const navigate = useNavigate();
-  const { clientPortalLogin, clientPortalClaim, clientPortalRegister, isLoading } = useAuthStore();
+  const { clientPortalLogin, clientPortalClaim, clientPortalRecover, clientPortalRegister, isLoading } = useAuthStore();
 
   const [step, setStep] = useState<PortalStep>('dni');
   const [error, setError] = useState('');
@@ -72,6 +72,7 @@ export default function ClientPortal() {
         setStep('claim');
       } else {
         setFirstName(data.firstName || '');
+        setVerifyBy(data.verifyBy || 'none');
         setStep('login');
       }
     } catch (err) {
@@ -100,6 +101,30 @@ export default function ClientPortal() {
       navigate('/app/home', { replace: true });
     } catch (err) {
       handleError(err, 'No pudimos crear tu contraseña. Probá de nuevo.');
+    }
+  };
+
+  const handleRecover = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    if (password.length < 6) {
+      setError('La contraseña debe tener al menos 6 caracteres');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Las contraseñas no coinciden');
+      return;
+    }
+    try {
+      await clientPortalRecover({
+        dni,
+        phone: verifyBy === 'phone' ? verifyValue : undefined,
+        email: verifyBy === 'email' ? verifyValue : undefined,
+        password,
+      });
+      navigate('/app/home', { replace: true });
+    } catch (err) {
+      handleError(err, 'No pudimos restablecer tu contraseña. Probá de nuevo.');
     }
   };
 
@@ -165,6 +190,61 @@ export default function ClientPortal() {
     setVerifyValue('');
   };
 
+  /** Campo de verificación de identidad (teléfono o email registrado en el local). */
+  const verifyFields = (
+    <>
+      {verifyBy === 'phone' && (
+        <div>
+          <label htmlFor="portal-phone" className="label">Teléfono registrado en el local</label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              id="portal-phone"
+              type="tel"
+              className="input pl-10 py-2.5 bg-white"
+              placeholder="Ej: 11 2345 6789"
+              value={verifyValue}
+              onChange={(e) => setVerifyValue(e.target.value)}
+              disabled={isLoading}
+              required
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Lo pedimos para confirmar que sos vos.
+          </p>
+        </div>
+      )}
+
+      {verifyBy === 'email' && (
+        <div>
+          <label htmlFor="portal-email-verify" className="label">Email registrado en el local</label>
+          <div className="relative">
+            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+            <input
+              id="portal-email-verify"
+              type="email"
+              className="input pl-10 py-2.5 bg-white"
+              placeholder="tu@email.com"
+              value={verifyValue}
+              onChange={(e) => setVerifyValue(e.target.value)}
+              disabled={isLoading}
+              required
+            />
+          </div>
+          <p className="mt-1 text-xs text-gray-500">
+            Lo pedimos para confirmar que sos vos.
+          </p>
+        </div>
+      )}
+
+      {verifyBy === 'none' && (
+        <p className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-amber-800 text-sm">
+          No tenemos un teléfono ni email verificado para tu cuenta. Pedile al local que actualice tus datos para poder verificar tu identidad.
+        </p>
+      )}
+    </>
+  );
+
   const passwordFields = (label: string) => (
     <>
       <div>
@@ -224,6 +304,10 @@ export default function ClientPortal() {
     login: {
       title: `¡Hola de nuevo${firstName ? ` ${firstName}` : ''}!`,
       subtitle: 'Ingresá tu contraseña para continuar',
+    },
+    recover: {
+      title: `¿Problemas para entrar${firstName ? `, ${firstName}` : ''}?`,
+      subtitle: 'Verificá tu identidad con el teléfono o email del local y creá una contraseña nueva.',
     },
     register: {
       title: 'Sos nuevo por acá',
@@ -309,49 +393,7 @@ export default function ClientPortal() {
           {/* PASO 2a: cuenta dada de alta -> crear contraseña */}
           {step === 'claim' && (
             <form onSubmit={handleClaim} className="space-y-4">
-              {verifyBy === 'phone' && (
-                <div>
-                  <label htmlFor="portal-phone" className="label">Teléfono registrado en el local</label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      id="portal-phone"
-                      type="tel"
-                      className="input pl-10 py-2.5 bg-white"
-                      placeholder="Ej: 11 2345 6789"
-                      value={verifyValue}
-                      onChange={(e) => setVerifyValue(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Lo pedimos para confirmar que sos vos.
-                  </p>
-                </div>
-              )}
-
-              {verifyBy === 'email' && (
-                <div>
-                  <label htmlFor="portal-email-verify" className="label">Email registrado en el local</label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                    <input
-                      id="portal-email-verify"
-                      type="email"
-                      className="input pl-10 py-2.5 bg-white"
-                      placeholder="tu@email.com"
-                      value={verifyValue}
-                      onChange={(e) => setVerifyValue(e.target.value)}
-                      disabled={isLoading}
-                      required
-                    />
-                  </div>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Lo pedimos para confirmar que sos vos.
-                  </p>
-                </div>
-              )}
+              {verifyFields}
 
               {passwordFields('Crear contraseña')}
 
@@ -398,6 +440,16 @@ export default function ClientPortal() {
                 </div>
               </div>
 
+              <div className="text-right">
+                <button
+                  type="button"
+                  onClick={() => { setStep('recover'); setError(''); setPassword(''); setConfirmPassword(''); setVerifyValue(''); }}
+                  className="text-sm text-primary-600 hover:text-primary-700 hover:underline"
+                >
+                  ¿Olvidaste tu contraseña?
+                </button>
+              </div>
+
               <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
@@ -406,6 +458,35 @@ export default function ClientPortal() {
                   </span>
                 ) : (
                   'Entrar'
+                )}
+              </button>
+            </form>
+          )}
+
+          {/* PASO 2b-bis: restablecer contraseña con DNI + teléfono/email */}
+          {step === 'recover' && (
+            <form onSubmit={handleRecover} className="space-y-4">
+              {verifyFields}
+
+              {passwordFields('Contraseña nueva')}
+
+              <button
+                type="button"
+                onClick={() => { setStep('login'); setError(''); setPassword(''); setConfirmPassword(''); setVerifyValue(''); }}
+                className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-primary-600 transition-colors"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Volver a entrar con mi contraseña
+              </button>
+
+              <button type="submit" disabled={isLoading} className="w-full py-3 rounded-xl bg-gradient-to-r from-primary-600 to-primary-500 text-white font-semibold shadow-lg shadow-primary-600/30 hover:from-primary-700 hover:to-primary-600 hover:shadow-xl hover:-translate-y-0.5 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 transition-all disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:translate-y-0">
+                {isLoading ? (
+                  <span className="flex items-center justify-center gap-2">
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    Actualizando...
+                  </span>
+                ) : (
+                  'Guardar contraseña y entrar'
                 )}
               </button>
             </form>

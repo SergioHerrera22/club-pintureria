@@ -142,6 +142,47 @@ export const claimAccount = async (req: Request, res: Response, next: NextFuncti
   }
 };
 
+// ===== RECUPERAR CONTRASEÑA: verifica DNI + teléfono (o email) registrado =====
+export const recoverClientPassword = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const dni = cleanDni(req.body?.dni);
+    const password = String(req.body?.password || '');
+
+    const user = await prisma.user.findUnique({ where: { dni }, include: { branch: true } });
+
+    if (!user || user.role !== UserRole.CLIENTE) {
+      throw new AppError(404, 'No encontramos un cliente con ese DNI.');
+    }
+    if (!user.isActive) {
+      throw new AppError(403, 'Tu cuenta está desactivada. Contactate con el local.');
+    }
+
+    // Misma verificación que "crear contraseña": el teléfono registrado (o el
+    // email si no hay teléfono). Sin esos datos no hay forma de verificar.
+    if (user.phone) {
+      const providedPhone = String(req.body?.phone || '');
+      if (!normalizePhone(providedPhone)) {
+        throw new AppError(400, 'Necesitamos el teléfono registrado para verificar tu identidad');
+      }
+      if (!phonesMatch(providedPhone, user.phone)) {
+        throw new AppError(400, 'El teléfono no coincide con el que tenemos registrado. Verificalo o contactá al local.');
+      }
+    } else if (user.email && !user.email.endsWith(TEMP_EMAIL_SUFFIX)) {
+      const providedEmail = String(req.body?.email || '').trim().toLowerCase();
+      if (!providedEmail || providedEmail !== user.email.toLowerCase()) {
+        throw new AppError(400, 'El email no coincide con el que tenemos registrado. Verificalo o contactá al local.');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+    await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+
+    res.json(clientSessionResponse(user));
+  } catch (error) {
+    next(error);
+  }
+};
+
 // ===== LOGIN: cliente con contraseña creada =====
 export const loginClient = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {

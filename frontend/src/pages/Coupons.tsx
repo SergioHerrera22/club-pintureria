@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Plus, Search, Edit, Trash2, Loader2, Ticket, Copy } from 'lucide-react';
 
 const couponTypeSchema = z.enum(['DESCUENTO_PORCENTUAL', 'PUNTOS_BONUS', 'PRODUCTO_GRATIS', 'ENVIO_GRATIS']);
@@ -71,6 +72,7 @@ const typeColors: Record<string, string> = {
 };
 
 export default function Coupons() {
+  const { toast } = useToast();
   const [coupons, setCoupons] = useState<Coupon[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -151,7 +153,7 @@ export default function Coupons() {
       form.reset({ code: '', name: '', description: '', type: 'DESCUENTO_PORCENTUAL' as const, value: 0, maxUses: undefined, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], isActive: true });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al guardar');
+      toast('error', err.response?.data?.error || 'Error al guardar');
     } finally {
       setSaving(false);
     }
@@ -166,7 +168,7 @@ export default function Coupons() {
       bulkForm.reset({ prefix: '', count: 10, name: '', description: '', type: 'DESCUENTO_PORCENTUAL', value: 0, maxUses: undefined, startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], isActive: true });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al crear cupones');
+      toast('error', err.response?.data?.error || 'Error al crear cupones');
     } finally {
       setSaving(false);
     }
@@ -217,7 +219,7 @@ export default function Coupons() {
   const copyToClipboard = async (code: string) => {
     try {
       await navigator.clipboard.writeText(code);
-      alert('Código copiado al portapapeles');
+      toast('success', 'Código copiado al portapapeles');
     } catch {
       // Fallback
       const textArea = document.createElement('textarea');
@@ -226,7 +228,7 @@ export default function Coupons() {
       textArea.select();
       document.execCommand('copy');
       document.body.removeChild(textArea);
-      alert('Código copiado al portapapeles');
+      toast('success', 'Código copiado al portapapeles');
     }
   };
 

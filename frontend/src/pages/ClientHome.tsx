@@ -393,7 +393,7 @@ export default function ClientHome() {
             )}
 
             {benefits.length > 0 && (
-              <SectionHeader title="Mis Beneficios" link="/app/benefits" icon={Shield} />
+              <SectionHeader title="Mis Beneficios" icon={Shield} />
             )}
             {benefits.length > 0 && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -421,8 +421,8 @@ export default function ClientHome() {
             <Award className="w-16 h-16 mx-auto mb-4 text-gray-300" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">¡Bienvenido a Robles Club!</h2>
             <p className="text-gray-500 mb-6">Comienza a comprar para ganar puntos, subir de nivel y desbloquear beneficios exclusivos.</p>
-            <button onClick={() => navigate('/app/purchases/new')} className="btn-primary px-6 py-3">
-              Realizar mi primera compra
+            <button onClick={() => navigate('/app/qr')} className="btn-primary px-6 py-3">
+              Mostrar mi QR en caja para empezar a sumar
             </button>
           </div>
         )}
@@ -673,7 +673,7 @@ function PurchaseRow({ purchase }: PurchaseRowProps) {
   );
 }
 
-function SectionHeader({ title, link, icon: Icon }: { title: string; link: string; icon: React.ComponentType<{ className?: string }> }) {
+function SectionHeader({ title, link, icon: Icon }: { title: string; link?: string; icon: React.ComponentType<{ className?: string }> }) {
   const navigate = useNavigate();
   return (
     <div className="flex items-center justify-between mb-3">
@@ -681,9 +681,11 @@ function SectionHeader({ title, link, icon: Icon }: { title: string; link: strin
         <Icon className="w-5 h-5 text-primary-600" />
         {title}
       </h2>
-      <button onClick={() => navigate(link)} className="text-sm text-primary-600 hover:underline flex items-center gap-1">
-        Ver todas <ChevronRight className="w-4 h-4" />
-      </button>
+      {link && (
+        <button onClick={() => navigate(link)} className="text-sm text-primary-600 hover:underline flex items-center gap-1">
+          Ver todas <ChevronRight className="w-4 h-4" />
+        </button>
+      )}
     </div>
   );
 }

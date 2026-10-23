@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn } from '../lib/utils';
+import { useToast } from '../components/Toast';
 import { Plus, Search, Edit, Trash2, Loader2, Trophy, Target, Zap, Flag, Calendar, Layers } from 'lucide-react';
 
 const challengeTypeSchema = z.enum(['CANTIDAD_PRODUCTOS', 'CANTIDAD_COMPRAS', 'MARCAS_DIFERENTES', 'CATEGORIAS_DIFERENTES', 'MONTO_ACUMULADO', 'FRECUENCIA_COMPRA']);
@@ -68,6 +69,7 @@ const defaultConditions: Record<string, Record<string, unknown>> = {
 };
 
 export default function Challenges() {
+  const { toast } = useToast();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -131,7 +133,7 @@ export default function Challenges() {
       form.reset({ name: '', description: '', imageUrl: '', type: 'CANTIDAD_PRODUCTOS' as const, target: 1, condition: {}, rewardPoints: 0, rewardCoupon: '', startDate: new Date().toISOString().split('T')[0], endDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], isActive: true });
       fetchData();
     } catch (err: any) {
-      alert(err.response?.data?.error || 'Error al guardar');
+      toast('error', err.response?.data?.error || 'Error al guardar');
     } finally {
       setSaving(false);
     }

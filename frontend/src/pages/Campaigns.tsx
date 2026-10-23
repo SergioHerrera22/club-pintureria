@@ -42,6 +42,7 @@ interface RecipientsResponse {
 }
 
 interface PreparedMessage {
+  /** Es el id del cliente (clientId) — el backend lo usa para registrar la entrega */
   id: string;
   name: string;
   /** Teléfono normalizado para WhatsApp (con código de país, sin +) */
@@ -50,15 +51,47 @@ interface PreparedMessage {
   message: string;
 }
 
-interface PrepareCampaignResponse {
+interface StartCampaignResponse {
+  /** null cuando es un envío de prueba (no se registra nada en el servidor) */
+  campaignId: string | null;
   isTest: boolean;
   messages: PreparedMessage[];
   skipped: Array<{ name: string; phone: string | null; reason: string }>;
 }
 
+/** Progreso de una campaña guardada (para retomar el envío). */
+interface CampaignProgress {
+  id: string;
+  name: string;
+  audience: string | null;
+  status: string;
+  createdAt: string;
+  total: number;
+  sent: number;
+  skipped: number;
+  pending: number;
+}
+
+/** Destinatario de una audiencia automática, con sus variables extra. */
+interface AudienceRecipient extends CampaignRecipient {
+  extra: Record<string, string | number>;
+}
+
+interface AudienceResponse {
+  kind: string;
+  recipients: AudienceRecipient[];
+  total: number;
+  withPhone: number;
+  withoutPhone: number;
+}
+
+type AudienceKind = 'near_prize' | 'weekly_summary';
+
 interface SendQueue {
+  /** Campaña registrada en el servidor (null en pruebas): permite retomarla */
+  campaignId: string | null;
   messages: PreparedMessage[];
-  skipped: PrepareCampaignResponse['skipped'];
+  skipped: StartCampaignResponse['skipped'];
   /** Índice del próximo destinatario a abrir */
   index: number;
   opened: number;
@@ -72,6 +105,8 @@ const TEMPLATE_LABELS: Record<string, string> = {
   redemption: 'Canje de premio',
   points_expiring: 'Puntos por vencer',
   campaign_default: 'Campaña (por defecto)',
+  premio_cerca: 'Te falta poco para un premio',
+  resumen_semanal: 'Resumen de la semana',
 };
 
 const VARIABLES = ['{nombre}', '{apellido}', '{dni}', '{puntos}', '{total}', '{empresa}'];
@@ -83,6 +118,8 @@ const TEMPLATE_VARIABLES: Record<string, string[]> = {
   redemption: ['{nombre}', '{premio}', '{puntos}', '{total}', '{empresa}'],
   points_expiring: ['{nombre}', '{puntos}', '{dias}', '{empresa}'],
   campaign_default: VARIABLES,
+  premio_cerca: ['{nombre}', '{premio}', '{faltan}', '{total}', '{empresa}'],
+  resumen_semanal: ['{nombre}', '{compras_semana}', '{puntos_semana}', '{periodo}', '{total}', '{empresa}'],
 };
 
 /** Dónde se usa cada plantilla. */
@@ -92,7 +129,25 @@ const TEMPLATE_HINTS: Record<string, string> = {
   redemption: 'Al canjear puntos por un premio.',
   points_expiring: 'Aviso automático por puntos por vencer.',
   campaign_default: 'Se usa en Campañas → Enviar cuando no se elige otra plantilla.',
+  premio_cerca: 'Audiencia automática: clientes a pocos puntos de un premio.',
+  resumen_semanal: 'Audiencia automática: clientes que compraron en los últimos días.',
 };
+
+/** Audiencias automáticas ofrecidas en Campañas → Enviar. */
+const AUDIENCES: Array<{ kind: AudienceKind; label: string; template: string; description: string }> = [
+  {
+    kind: 'near_prize',
+    label: 'A pocos puntos de un premio',
+    template: 'premio_cerca',
+    description: 'Clientes que están por debajo de un premio pero cerca de alcanzarlo.',
+  },
+  {
+    kind: 'weekly_summary',
+    label: 'Resumen de compras recientes',
+    template: 'resumen_semanal',
+    description: 'Clientes que compraron en los últimos días, con lo que sumaron.',
+  },
+];
 
 export default function Campaigns() {
   const [tab, setTab] = useState<'send' | 'templates'>('send');
@@ -112,6 +167,19 @@ export default function Campaigns() {
   const [sending, setSending] = useState(false);
   const [queue, setQueue] = useState<SendQueue | null>(null);
   const [error, setError] = useState('');
+
+  /** Audiencia automática activa (null = destinatarios manuales) */
+  const [audience, setAudience] = useState<AudienceKind | null>(null);
+  const [audienceRecipients, setAudienceRecipients] = useState<AudienceRecipient[]>([]);
+  const [audienceStats, setAudienceStats] = useState({ total: 0, withPhone: 0, withoutPhone: 0 });
+  const [loadingAudience, setLoadingAudience] = useState(false);
+  /** near_prize: puntos faltantes máximos. weekly_summary: ventana en días */
+  const [maxFaltan, setMaxFaltan] = useState(500);
+  const [days, setDays] = useState(7);
+
+  /** Campañas guardadas sin terminar (para retomar el envío) */
+  const [activeCampaigns, setActiveCampaigns] = useState<CampaignProgress[]>([]);
+  const [resuming, setResuming] = useState(false);
 
   /** Filtro de sucursal: '' = todas las sucursales */
   const [branchId, setBranchId] = useState('');
@@ -150,9 +218,62 @@ export default function Campaigns() {
     }
   };
 
+  const fetchActiveCampaigns = async () => {
+    try {
+      const res = await api.get<{ campaigns: CampaignProgress[] }>('/campaigns/active');
+      setActiveCampaigns(res.data.campaigns.filter((c) => c.pending > 0));
+    } catch {
+      // ignore
+    }
+  };
+
+  const fetchAudience = async (kind: AudienceKind) => {
+    setLoadingAudience(true);
+    setError('');
+    try {
+      const params: Record<string, string | number> = {};
+      if (branchId) params.branchId = branchId;
+      if (kind === 'near_prize') params.maxFaltan = maxFaltan;
+      if (kind === 'weekly_summary') params.days = days;
+      const res = await api.get<AudienceResponse>(`/campaigns/audience/${kind}`, { params });
+      setAudienceRecipients(res.data.recipients);
+      setAudienceStats({ total: res.data.total, withPhone: res.data.withPhone, withoutPhone: res.data.withoutPhone });
+      // Cargar la plantilla sugerida para esta audiencia
+      const tpl = AUDIENCES.find((a) => a.kind === kind)?.template;
+      if (tpl && templates[tpl]) setMessage(templates[tpl]);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Error al calcular la audiencia');
+    } finally {
+      setLoadingAudience(false);
+    }
+  };
+
+  const selectAudience = (kind: AudienceKind) => {
+    setAudience(kind);
+    setSelectedIds([]);
+    fetchAudience(kind);
+  };
+
+  const clearAudience = () => {
+    setAudience(null);
+    setAudienceRecipients([]);
+  };
+
+  /**
+   * Registra en el servidor el resultado de un destinatario (idempotente:
+   * sólo pasa de PENDIENTE una vez). Se manda sin esperar para no frenar la cola.
+   */
+  const ackDelivery = (campaignId: string | null, clientId: string, status: 'ENVIADO' | 'OMITIDO') => {
+    if (!campaignId) return;
+    api.post(`/campaigns/${campaignId}/ack`, { clientId, status }).catch(() => {
+      // Si falla, el destinatario queda PENDIENTE y se ofrecerá al retomar
+    });
+  };
+
   useEffect(() => {
     fetchTemplates();
     fetchBranches();
+    fetchActiveCampaigns();
   }, []);
 
   // Recarga los destinatarios al cambiar el filtro de sucursal.
@@ -208,34 +329,35 @@ export default function Campaigns() {
       setError('Escribí el mensaje que querés enviar');
       return;
     }
-    if (mode === 'selected' && selectedIds.length === 0) {
+    if (!audience && mode === 'selected' && selectedIds.length === 0) {
       setError('Seleccioná al menos un cliente');
       return;
     }
 
     const isTest = testPhone.trim().length > 0;
     const branchScope = selectedBranchName ? ` de la sucursal "${selectedBranchName}"` : '';
-    if (
-      !isTest &&
-      !confirm(
-        `¿Abrir WhatsApp Web para enviar este mensaje a ${
-          mode === 'all'
-            ? `TODOS los clientes${branchScope} con WhatsApp (${stats.withPhone})`
-            : `${selectedIds.length} cliente(s)`
-        }?`
-      )
-    ) {
-      return;
+    if (!isTest) {
+      const target = audience
+        ? `${audienceRecipients.length} cliente(s) de la audiencia elegida${branchScope}`
+        : mode === 'all'
+          ? `TODOS los clientes${branchScope} con WhatsApp (${stats.withPhone})`
+          : `${selectedIds.length} cliente(s)`;
+      if (!confirm(`¿Registrar la campaña y abrir WhatsApp Web para enviar este mensaje a ${target}? El avance queda guardado: si cerrás la pestaña, podés retomar el envío sin reenviar.`)) {
+        return;
+      }
     }
 
     setSending(true);
     try {
-      const res = await api.post<PrepareCampaignResponse>('/campaigns/prepare', {
+      const res = await api.post<StartCampaignResponse>('/campaigns/start', {
         message,
-        sendToAll: !isTest && mode === 'all',
-        recipientIds: !isTest && mode === 'selected' ? selectedIds : undefined,
+        sendToAll: !isTest && !audience && mode === 'all',
+        recipientIds: !isTest && (audience || mode === 'selected') ? (mode === 'selected' ? selectedIds : undefined) : undefined,
         testPhone: isTest ? testPhone.trim() : undefined,
         branchId: branchId || undefined,
+        audience: !isTest && audience ? audience : undefined,
+        maxFaltan: !isTest && audience === 'near_prize' ? maxFaltan : undefined,
+        days: !isTest && audience === 'weekly_summary' ? days : undefined,
       });
 
       if (res.data.messages.length === 0) {
@@ -245,9 +367,12 @@ export default function Campaigns() {
 
       // Se aprovecha el click del usuario para abrir la primera pestaña;
       // si el navegador la bloquea, el panel permite abrirla manualmente.
-      const openedFirst = openWhatsAppTab(res.data.messages[0]) ? 1 : 0;
+      const first = res.data.messages[0];
+      const openedFirst = openWhatsAppTab(first) ? 1 : 0;
+      if (openedFirst) ackDelivery(res.data.campaignId, first.id, 'ENVIADO');
 
       setQueue({
+        campaignId: res.data.campaignId,
         messages: res.data.messages,
         skipped: res.data.skipped,
         index: openedFirst,
@@ -255,6 +380,24 @@ export default function Campaigns() {
         jumped: 0,
         popupBlocked: openedFirst === 0,
       });
+      setActiveCampaigns((prev) =>
+        res.data.campaignId
+          ? [
+              {
+                id: res.data.campaignId,
+                name: message.split('\n')[0].slice(0, 60),
+                audience: audience,
+                status: 'ENVIANDO',
+                createdAt: new Date().toISOString(),
+                total: res.data.messages.length + res.data.skipped.length,
+                sent: openedFirst,
+                skipped: res.data.skipped.length,
+                pending: res.data.messages.length - openedFirst,
+              },
+              ...prev,
+            ]
+          : prev
+      );
     } catch (err: any) {
       setError(err.response?.data?.error || 'Error al preparar la campaña');
     } finally {
@@ -267,6 +410,7 @@ export default function Campaigns() {
   const handleOpenCurrent = () => {
     if (!queue || !currentMessage) return;
     const opened = openWhatsAppTab(currentMessage);
+    if (opened) ackDelivery(queue.campaignId, currentMessage.id, 'ENVIADO');
     setQueue((prev) =>
       prev
         ? {
@@ -280,6 +424,8 @@ export default function Campaigns() {
   };
 
   const handleSkipCurrent = () => {
+    if (!queue || !currentMessage) return;
+    ackDelivery(queue.campaignId, currentMessage.id, 'OMITIDO');
     setQueue((prev) => (prev ? { ...prev, index: prev.index + 1, jumped: prev.jumped + 1, popupBlocked: false } : prev));
   };
 
@@ -292,7 +438,56 @@ export default function Campaigns() {
     }
   };
 
-  const closeQueue = () => setQueue(null);
+  const closeQueue = () => {
+    setQueue(null);
+    // Al cerrar a mitad de camino, la campaña queda ENVIANDO en el servidor
+    // y el banner de "Retomar" la ofrecerá en la próxima visita.
+    fetchActiveCampaigns();
+  };
+
+  /** Retoma una campaña guardada: carga sólo los destinatarios PENDIENTES. */
+  const handleResume = async (campaignId: string) => {
+    setResuming(true);
+    setError('');
+    try {
+      const res = await api.get<{ progress: CampaignProgress; messages: PreparedMessage[] }>(`/campaigns/${campaignId}`);
+      if (res.data.messages.length === 0) {
+        // No quedó nada pendiente: marcar y sacar de la lista
+        await api.post(`/campaigns/${campaignId}/ack`, { clientId: '__none__', status: 'OMITIDO' }).catch(() => {});
+        fetchActiveCampaigns();
+        return;
+      }
+      const first = res.data.messages[0];
+      const openedFirst = openWhatsAppTab(first) ? 1 : 0;
+      if (openedFirst) ackDelivery(campaignId, first.id, 'ENVIADO');
+
+      setQueue({
+        campaignId,
+        messages: res.data.messages,
+        skipped: [],
+        index: openedFirst,
+        opened: openedFirst,
+        jumped: 0,
+        popupBlocked: openedFirst === 0,
+      });
+      setActiveCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'No se pudo retomar la campaña');
+    } finally {
+      setResuming(false);
+    }
+  };
+
+  /** Descarta una campaña sin terminar: los pendientes quedan omitidos. */
+  const handleDiscardCampaign = async (campaignId: string) => {
+    if (!confirm('¿Descartar esta campaña? Los destinatarios pendientes no recibirán el mensaje.')) return;
+    try {
+      await api.post(`/campaigns/${campaignId}/cancel`);
+      setActiveCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'No se pudo descartar la campaña');
+    }
+  };
 
   const handleSaveTemplates = async () => {
     setSavingTemplates(true);
@@ -334,6 +529,44 @@ export default function Campaigns() {
         <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
           <AlertCircle className="w-5 h-5 flex-shrink-0" />
           {error}
+        </div>
+      )}
+
+      {/* Campañas sin terminar: se pueden retomar sin reenviar a nadie */}
+      {tab === 'send' && activeCampaigns.length > 0 && !queue && (
+        <div className="card p-4 sm:p-5 space-y-3">
+          <h2 className="font-semibold text-gray-900 flex items-center gap-2">
+            <RefreshCw className="w-5 h-5 text-amber-500" /> Envíos sin terminar
+          </h2>
+          {activeCampaigns.map((c) => (
+            <div key={c.id} className="flex flex-col sm:flex-row sm:items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-900 truncate">{c.name}</p>
+                <p className="text-xs text-amber-700">
+                  {c.sent} de {c.total - c.skipped} enviados · {c.pending} pendiente(s)
+                  {c.audience ? ` · audiencia ${c.audience === 'near_prize' ? 'premios' : 'semanal'}` : ''}
+                </p>
+              </div>
+              <div className="flex gap-2 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => handleResume(c.id)}
+                  disabled={resuming}
+                  className="btn-primary py-2 px-3 text-sm flex items-center gap-2"
+                >
+                  {resuming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  Retomar envío
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDiscardCampaign(c.id)}
+                  className="btn-outline py-2 px-3 text-sm"
+                >
+                  Descartar
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
@@ -424,10 +657,10 @@ export default function Campaigns() {
               <div className="grid grid-cols-1 gap-2">
                 <button
                   type="button"
-                  onClick={() => setMode('all')}
+                  onClick={() => { clearAudience(); setMode('all'); }}
                   className={cn(
                     'p-3 rounded-lg border text-left transition-colors',
-                    mode === 'all' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                    !audience && mode === 'all' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
                   )}
                 >
                   <p className="font-medium text-gray-900">
@@ -437,10 +670,10 @@ export default function Campaigns() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setMode('selected')}
+                  onClick={() => { clearAudience(); setMode('selected'); }}
                   className={cn(
                     'p-3 rounded-lg border text-left transition-colors',
-                    mode === 'selected' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                    !audience && mode === 'selected' ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
                   )}
                 >
                   <p className="font-medium text-gray-900">Seleccionar clientes</p>
@@ -448,7 +681,94 @@ export default function Campaigns() {
                 </button>
               </div>
 
-              {mode === 'selected' && (
+              {/* Audiencias automáticas: grupos que calcula el servidor */}
+              <div className="pt-2 border-t border-gray-100 space-y-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Audiencias automáticas</p>
+                {AUDIENCES.map((a) => (
+                  <button
+                    key={a.kind}
+                    type="button"
+                    onClick={() => selectAudience(a.kind)}
+                    className={cn(
+                      'w-full p-3 rounded-lg border text-left transition-colors',
+                      audience === a.kind ? 'border-primary-500 bg-primary-50' : 'border-gray-200 hover:bg-gray-50'
+                    )}
+                  >
+                    <p className="text-sm font-medium text-gray-900">{a.label}</p>
+                    <p className="text-xs text-gray-500">{a.description}</p>
+                  </button>
+                ))}
+
+                {audience === 'near_prize' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600 whitespace-nowrap">Faltan hasta</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={maxFaltan}
+                      onChange={(e) => setMaxFaltan(Math.max(1, Number(e.target.value) || 1))}
+                      className="input text-sm py-1.5 no-spin"
+                    />
+                    <span className="text-xs text-gray-600 whitespace-nowrap">puntos</span>
+                    <button type="button" onClick={() => fetchAudience('near_prize')} className="btn-outline py-1.5 px-2 text-xs">
+                      Actualizar
+                    </button>
+                  </div>
+                )}
+                {audience === 'weekly_summary' && (
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-600 whitespace-nowrap">Últimos</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={90}
+                      value={days}
+                      onChange={(e) => setDays(Math.min(90, Math.max(1, Number(e.target.value) || 1)))}
+                      className="input text-sm py-1.5 no-spin"
+                    />
+                    <span className="text-xs text-gray-600 whitespace-nowrap">días</span>
+                    <button type="button" onClick={() => fetchAudience('weekly_summary')} className="btn-outline py-1.5 px-2 text-xs">
+                      Actualizar
+                    </button>
+                  </div>
+                )}
+
+                {audience && (
+                  <div className="flex items-center justify-between text-xs text-gray-600">
+                    {loadingAudience ? (
+                      <span className="flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> Calculando…</span>
+                    ) : (
+                      <span>{audienceStats.withPhone} con WhatsApp · {audienceStats.withoutPhone} sin teléfono</span>
+                    )}
+                    <button type="button" onClick={clearAudience} className="text-gray-500 hover:underline flex items-center gap-1">
+                      <X className="w-3 h-3" /> Quitar
+                    </button>
+                  </div>
+                )}
+
+                {audience && !loadingAudience && audienceRecipients.length > 0 && (
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {audienceRecipients.slice(0, 100).map((r) => (
+                      <div key={r.id} className="flex items-center justify-between gap-2 p-2.5">
+                        <div className="min-w-0">
+                          <p className="text-sm text-gray-900 truncate">{r.firstName} {r.lastName}</p>
+                          <p className="text-[11px] text-gray-500">
+                            DNI {r.dni}
+                            {r.extra?.premio ? ` · falta ${formatNumber(Number(r.extra.faltan))} pts para ${r.extra.premio}` : ''}
+                            {r.extra?.compras_semana !== undefined ? ` · ${r.extra.compras_semana} compra(s), +${formatNumber(Number(r.extra.puntos_semana))} pts` : ''}
+                          </p>
+                        </div>
+                        <span className="text-xs text-primary-600 font-medium flex-shrink-0">{formatNumber(r.currentPoints)} pts</span>
+                      </div>
+                    ))}
+                    {audienceRecipients.length > 100 && (
+                      <p className="p-2 text-xs text-gray-500 text-center">…y {audienceRecipients.length - 100} más</p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {!audience && mode === 'selected' && (
                 <div className="space-y-3">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
