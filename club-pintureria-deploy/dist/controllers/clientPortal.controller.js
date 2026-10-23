@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.registerClient = exports.loginClient = exports.claimAccount = exports.checkDni = exports.cleanDni = void 0;
+exports.registerClient = exports.loginClient = exports.recoverClientPassword = exports.claimAccount = exports.checkDni = exports.cleanDni = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const client_1 = require("@prisma/client");
 const prisma_1 = require("../config/prisma");
@@ -128,6 +128,44 @@ const claimAccount = async (req, res, next) => {
     }
 };
 exports.claimAccount = claimAccount;
+// ===== RECUPERAR CONTRASEÑA: verifica DNI + teléfono (o email) registrado =====
+const recoverClientPassword = async (req, res, next) => {
+    try {
+        const dni = (0, exports.cleanDni)(req.body?.dni);
+        const password = String(req.body?.password || '');
+        const user = await prisma_1.prisma.user.findUnique({ where: { dni }, include: { branch: true } });
+        if (!user || user.role !== client_1.UserRole.CLIENTE) {
+            throw new errorHandler_1.AppError(404, 'No encontramos un cliente con ese DNI.');
+        }
+        if (!user.isActive) {
+            throw new errorHandler_1.AppError(403, 'Tu cuenta está desactivada. Contactate con el local.');
+        }
+        // Misma verificación que "crear contraseña": el teléfono registrado (o el
+        // email si no hay teléfono). Sin esos datos no hay forma de verificar.
+        if (user.phone) {
+            const providedPhone = String(req.body?.phone || '');
+            if (!normalizePhone(providedPhone)) {
+                throw new errorHandler_1.AppError(400, 'Necesitamos el teléfono registrado para verificar tu identidad');
+            }
+            if (!phonesMatch(providedPhone, user.phone)) {
+                throw new errorHandler_1.AppError(400, 'El teléfono no coincide con el que tenemos registrado. Verificalo o contactá al local.');
+            }
+        }
+        else if (user.email && !user.email.endsWith(TEMP_EMAIL_SUFFIX)) {
+            const providedEmail = String(req.body?.email || '').trim().toLowerCase();
+            if (!providedEmail || providedEmail !== user.email.toLowerCase()) {
+                throw new errorHandler_1.AppError(400, 'El email no coincide con el que tenemos registrado. Verificalo o contactá al local.');
+            }
+        }
+        const passwordHash = await bcryptjs_1.default.hash(password, 12);
+        await prisma_1.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+        res.json(clientSessionResponse(user));
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.recoverClientPassword = recoverClientPassword;
 // ===== LOGIN: cliente con contraseña creada =====
 const loginClient = async (req, res, next) => {
     try {

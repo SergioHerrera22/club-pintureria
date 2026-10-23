@@ -6,6 +6,10 @@ export interface WhatsAppTemplates {
     redemption: string;
     points_expiring: string;
     campaign_default: string;
+    /** Audiencia: clientes a pocos puntos de un premio */
+    premio_cerca: string;
+    /** Audiencia: resumen de los últimos días del cliente */
+    resumen_semanal: string;
 }
 /**
  * Plataforma del club: el link que se comparte en los mensajes para que el
@@ -20,6 +24,8 @@ export declare const PLATFORM_URL = "https://club.roblespinturerias.com/";
  * - redemption: {nombre} {premio} {puntos} {total} {empresa}
  * - points_expiring: {nombre} {puntos} {dias} {empresa}
  * - campaign_default: {nombre} {apellido} {dni} {puntos} {total} {empresa}
+ * - premio_cerca: {nombre} {premio} {faltan} {total} {empresa}
+ * - resumen_semanal: {nombre} {compras_semana} {puntos_semana} {periodo} {total} {empresa}
  */
 export declare const DEFAULT_WHATSAPP_TEMPLATES: WhatsAppTemplates;
 export declare const DEFAULT_WHATSAPP_CAMPAIGN_MESSAGE: string;

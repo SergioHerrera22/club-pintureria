@@ -38,6 +38,7 @@ model User {
   saleRevisionsRequested SaleRevision[]    @relation("SaleRevisionRequestedBy")
   saleRevisionsReviewed  SaleRevision[]    @relation("SaleRevisionReviewedBy")
   vendorPurchases        Purchase[]        @relation("PurchaseVendor")
+  passwordResetTokens    PasswordResetToken[]
 
   @@index([dni])
   @@index([email])
@@ -445,6 +446,78 @@ model SaleRevision {
   @@index([purchaseId])
   @@index([status, createdAt])
   @@index([requestedById, createdAt])
+}
+
+enum CampaignStatus {
+  ENVIANDO
+  COMPLETADA
+  CANCELADA
+}
+
+enum CampaignDeliveryStatus {
+  PENDIENTE
+  ENVIADO
+  OMITIDO
+  ERROR
+}
+
+/// Registro de una campaña de WhatsApp. Permite retomarla desde donde quedó
+/// sin reenviar a los destinatarios que ya fueron marcados como enviados.
+model Campaign {
+  id          String            @id @default(cuid())
+  /// Primeros caracteres del mensaje, para identificarla en el historial
+  name        String
+  message     String
+  /// Audiencia usada al iniciar: 'near_prize' | 'weekly_summary' | null (a mano)
+  audience    String?
+  /// Sucursal filtrada al iniciar (null = todas)
+  branchId    String?
+  /// Cómo se eligieron los destinatarios: TODOS | SELECCIONADOS
+  scope       String            @default("TODOS")
+  status      CampaignStatus    @default(ENVIANDO)
+  createdById String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  deliveries  CampaignDelivery[]
+
+  @@index([status, createdAt])
+}
+
+/// Destinatario individual de una campaña: estado propio para la idempotencia
+/// (un destinatario PENDIENTE jamás se marca ENVIADO dos veces).
+model CampaignDelivery {
+  id         String                  @id @default(cuid())
+  campaignId String
+  clientId   String
+  /// Nombre y DNI al momento de iniciar la campaña (foto del momento)
+  clientName String
+  dni        String
+  phone      String?
+  /// Mensaje ya renderizado con los datos de ese destinatario
+  message    String
+  status     CampaignDeliveryStatus  @default(PENDIENTE)
+  /// Motivo cuando status = OMITIDO/ERROR (sin teléfono, salteado a mano…)
+  reason     String?
+  sentAt     DateTime?
+  createdAt  DateTime                @default(now())
+  campaign   Campaign                @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, clientId])
+  @@index([campaignId, status])
+}
+
+/// Token de recuperación de contraseña (un solo uso, con vencimiento).
+/// Se guarda sólo el SHA-256 del token, nunca el token en claro.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 enum TransactionType {

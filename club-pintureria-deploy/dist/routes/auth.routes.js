@@ -68,10 +68,45 @@ const changePasswordSchema = zod_1.z.object({
         newPassword: zod_1.z.string().min(6),
     }),
 });
+const forgotPasswordSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        email: zod_1.z.string().email('Correo inválido'),
+    }),
+});
+const resetPasswordSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        token: zod_1.z.string().min(10),
+        password: zod_1.z.string().min(6, 'Mínimo 6 caracteres'),
+    }),
+});
+// El rate limit global está deshabilitado: limitamos fuerza bruta/abuso
+// puntual sobre la recuperación de contraseña (por IP, en memoria).
+const attempts = new Map();
+const recoveryRateLimit = (max, windowMs) => {
+    return (req, res, next) => {
+        const ip = req.ip || 'unknown';
+        const now = Date.now();
+        const entry = attempts.get(ip);
+        if (!entry || entry.resetAt < now) {
+            attempts.set(ip, { count: 1, resetAt: now + windowMs });
+            next();
+            return;
+        }
+        entry.count += 1;
+        if (entry.count > max) {
+            res.status(429).json({ error: 'Demasiados intentos. Probá de nuevo en unos minutos.' });
+            return;
+        }
+        next();
+    };
+};
 // Alta de clientes: público, pero si la hace un empleado con permisos
 // personalizados, exige que tenga habilitada la carga de clientes.
 router.post('/register', auth_1.optionalAuth, (0, auth_1.requireStaffMenuPermission)('clientes', 'nuevo-cliente'), (0, validation_1.validate)(registerSchema), authController.register);
 router.post('/login', (0, validation_1.validate)(loginSchema), authController.login);
+// Recuperación de contraseña (público, con límite de intentos)
+router.post('/forgot-password', recoveryRateLimit(10, 15 * 60 * 1000), (0, validation_1.validate)(forgotPasswordSchema), authController.forgotPassword);
+router.post('/reset-password', recoveryRateLimit(20, 15 * 60 * 1000), (0, validation_1.validate)(resetPasswordSchema), authController.resetPassword);
 router.post('/refresh', (0, validation_1.validate)(refreshSchema), authController.refreshToken);
 router.post('/logout', auth_1.authenticate, authController.logout);
 router.get('/me', auth_1.authenticate, authController.getMe);

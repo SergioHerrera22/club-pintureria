@@ -29,6 +29,8 @@ exports.PLATFORM_URL = 'https://club.roblespinturerias.com/';
  * - redemption: {nombre} {premio} {puntos} {total} {empresa}
  * - points_expiring: {nombre} {puntos} {dias} {empresa}
  * - campaign_default: {nombre} {apellido} {dni} {puntos} {total} {empresa}
+ * - premio_cerca: {nombre} {premio} {faltan} {total} {empresa}
+ * - resumen_semanal: {nombre} {compras_semana} {puntos_semana} {periodo} {total} {empresa}
  */
 exports.DEFAULT_WHATSAPP_TEMPLATES = {
     points_earned: `¡Hola {nombre}! 🛒\n\nGracias por tu compra en *{empresa}*.\n\n✅ Sumaste *{puntos} puntos*\n💰 Saldo acumulado: *{total} puntos*\n🧾 Ticket {ticket} · {monto}\n📍 {sucursal} · {fecha}\n\n🌐 Mirá tus puntos y todo sobre el club:\n${exports.PLATFORM_URL}\n\nSeguí sumando puntos y canjealos por premios. 🎁\n\n{empresa}`,
@@ -36,6 +38,8 @@ exports.DEFAULT_WHATSAPP_TEMPLATES = {
     redemption: `¡Hola {nombre}! 🎁\n\nCanjeaste *{premio}* por *{puntos} puntos*.\n💰 Saldo restante: *{total} puntos*.\n\nPasá por la sucursal a retirarlo presentando tu DNI.\n\n🌐 Mirá tus puntos y tus canjes:\n${exports.PLATFORM_URL}\n\n{empresa}`,
     points_expiring: `⏳ *{empresa}*\n\nHola {nombre}: tus *{puntos} puntos* vencen en *{dias} días* por inactividad.\n\nHacé una compra para mantenerlos activos o canjealos ahora por premios.\n\n🌐 Ingresá con tu DNI y mirá tu saldo:\n${exports.PLATFORM_URL}\n\n{empresa}`,
     campaign_default: `¡Hola {nombre}! 👋\n\n¡Tenemos novedades para vos en *{empresa}*!\n\nMirá lo nuevo y acercate a conocerlo.\n\n🌐 Ingresá con tu DNI y mirá tus puntos y promociones:\n${exports.PLATFORM_URL}\n\n{empresa}`,
+    premio_cerca: `¡Hola {nombre}! 🎁\n\nEstás a un paso: te faltan *{faltan} puntos* para llevarte *{premio}*.\n\nYa tenés *{total} puntos* acumulados.\n\n🌐 Mirá tus premios y tu saldo:\n${exports.PLATFORM_URL}\n\n¡Una compra más y es tuyo!\n\n{empresa}`,
+    resumen_semanal: `¡Hola {nombre}! 📊\n\nResumen de los últimos {periodo} días:\n✅ {compras_semana} compra(s)\n✅ {puntos_semana} puntos sumados\n\n💰 Saldo acumulado: *{total} puntos*\n\n🌐 Ingresá con tu DNI y mirá tus puntos:\n${exports.PLATFORM_URL}\n\n{empresa}`,
 };
 /**
  * Versiones anteriores de los defaults (guardadas tal cual en la DB de algunas

@@ -99,8 +99,17 @@ const portalRegisterSchema = zod_1.z.object({
         password: zod_1.z.string().min(6, 'La contraseña debe tener al menos 6 caracteres').max(72),
     }),
 });
+const portalRecoverSchema = zod_1.z.object({
+    body: zod_1.z.object({
+        dni: zod_1.z.string().min(6).max(12),
+        password: zod_1.z.string().min(6, 'La contraseña debe tener al menos 6 caracteres').max(72),
+        phone: zod_1.z.string().max(30).optional(),
+        email: zod_1.z.string().email('Email inválido').optional().or(zod_1.z.literal('')),
+    }),
+});
 router.post('/check', portalRateLimit(30, 15 * 60 * 1000), (0, validation_1.validate)(dniSchema), clientPortalController.checkDni);
 router.post('/claim', portalRateLimit(10, 15 * 60 * 1000), (0, validation_1.validate)(claimSchema), clientPortalController.claimAccount);
+router.post('/recover-password', portalRateLimit(10, 15 * 60 * 1000), (0, validation_1.validate)(portalRecoverSchema), clientPortalController.recoverClientPassword);
 router.post('/login', portalRateLimit(15, 15 * 60 * 1000), (0, validation_1.validate)(portalLoginSchema), clientPortalController.loginClient);
 router.post('/register', portalRateLimit(10, 15 * 60 * 1000), (0, validation_1.validate)(portalRegisterSchema), clientPortalController.registerClient);
 exports.default = router;

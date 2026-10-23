@@ -44,12 +44,12 @@ class EmailService {
     }
     async sendWelcomeEmail(email, firstName) {
         const html = `
-      <h1>¡Bienvenido al Club Robles, ${firstName}!</h1>
+      <h1>¡Bienvenido a Robles Pinturerias, ${firstName}!</h1>
       <p>Gracias por unirte a nuestro programa de fidelidad.</p>
       <p>Comienza a ganar puntos en cada compra y canjéalos por increíbles premios.</p>
       <p>Visita tu sucursal más cercana y presenta tu DNI para empezar.</p>
     `;
-        await this.sendEmail(email, 'Bienvenido al Club Robles', html);
+        await this.sendEmail(email, 'Bienvenido a Robles Pinturerias', html);
     }
     async sendPointsEarnedEmail(email, firstName, points, newBalance) {
         const html = `
@@ -57,7 +57,7 @@ class EmailService {
       <p>Tu nuevo saldo es de <strong>${newBalance} puntos</strong>.</p>
       <p>Sigue comprando para alcanzar los mejores premios.</p>
     `;
-        await this.sendEmail(email, `Ganaste ${points} puntos en Club Robles`, html);
+        await this.sendEmail(email, `Ganaste ${points} puntos en Robles Pinturerias`, html);
     }
     async sendRedemptionConfirmationEmail(email, firstName, prizeName, pointsSpent, newBalance) {
         const html = `
@@ -66,7 +66,7 @@ class EmailService {
       <p>Tu saldo actual: <strong>${newBalance} puntos</strong>.</p>
       <p>Pasa por la sucursal para retirar tu premio.</p>
     `;
-        await this.sendEmail(email, 'Canje confirmado - Club Robles', html);
+        await this.sendEmail(email, 'Canje confirmado - Robles Pinturerias', html);
     }
     async sendPointsExpiringEmail(email, firstName, points, daysLeft) {
         const html = `
@@ -74,15 +74,30 @@ class EmailService {
       <p>Tienes <strong>${points} puntos</strong> que vencen en <strong>${daysLeft} días</strong>.</p>
       <p>¡No los pierdas! Realiza una compra para mantenerlos activos.</p>
     `;
-        await this.sendEmail(email, 'Tus puntos vencen pronto - Club Robles', html);
+        await this.sendEmail(email, 'Tus puntos vencen pronto - Robles Pinturerias', html);
+    }
+    /**
+     * Enlace para restablecer la contraseña (un solo uso, vence en 30 minutos).
+     * Devuelve false si el correo no pudo enviarse (SMTP sin configurar u error).
+     */
+    async sendPasswordResetEmail(email, firstName, resetLink) {
+        const html = `
+      <h1>Restablecer contraseña, ${firstName}</h1>
+      <p>Recibimos un pedido para restablecer tu contraseña.</p>
+      <p><a href="${resetLink}">Hacé clic acá para elegir una nueva</a>.</p>
+      <p>Si el enlace no se abre, pegá este link en el navegador:</p>
+      <p>${resetLink}</p>
+      <p>Vence en 30 minutos. Si no pediste esto, ignorá este correo: tu contraseña no cambia.</p>
+    `;
+        return this.sendEmail(email, 'Restablecer contraseña - Robles Pinturerias', html);
     }
     async sendBirthdayBonusEmail(email, firstName, bonusPoints) {
         const html = `
       <h1>¡Feliz Cumpleaños, ${firstName}!</h1>
       <p>Te regalamos <strong>${bonusPoints} puntos extra</strong> por tu día.</p>
-      <p>¡Disfruta tu día y sigue ganando con Club Robles!</p>
+      <p>¡Disfruta tu día y sigue ganando con Robles Pinturerias!</p>
     `;
-        await this.sendEmail(email, '¡Feliz Cumpleaños! - Club Robles', html);
+        await this.sendEmail(email, '¡Feliz Cumpleaños! - Robles Pinturerias', html);
     }
 }
 exports.emailService = new EmailService();

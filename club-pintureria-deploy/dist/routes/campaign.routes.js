@@ -51,7 +51,28 @@ const sendCampaignSchema = zod_1.z.object({
         branchId: zod_1.z.string().optional(),
     }),
 });
+const startCampaignSchema = sendCampaignSchema.extend({
+    body: sendCampaignSchema.shape.body.extend({
+        audience: zod_1.z.enum(['near_prize', 'weekly_summary']).optional(),
+        maxFaltan: zod_1.z.number().int().positive().optional(),
+        days: zod_1.z.number().int().positive().max(90).optional(),
+    }),
+});
+const ackDeliverySchema = zod_1.z.object({
+    body: zod_1.z.object({
+        clientId: zod_1.z.string().min(1),
+        status: zod_1.z.enum(['ENVIADO', 'OMITIDO', 'ERROR']),
+        reason: zod_1.z.string().max(200).optional(),
+    }),
+});
 router.post('/send', (0, auth_1.requireMenuPermission)('campanas'), (0, validation_1.validate)(sendCampaignSchema), campaignController.sendCampaign);
 router.post('/prepare', (0, auth_1.requireMenuPermission)('campanas'), (0, validation_1.validate)(sendCampaignSchema), campaignController.prepareCampaign);
+router.post('/start', (0, auth_1.requireMenuPermission)('campanas'), (0, validation_1.validate)(startCampaignSchema), campaignController.startCampaign);
+// Rutas con path fijo antes de '/:id' para que no las coma el param.
+router.get('/active', campaignController.getActiveCampaigns);
+router.get('/audience/:kind', campaignController.getAudience);
+router.get('/:id', campaignController.getCampaign);
+router.post('/:id/ack', (0, validation_1.validate)(ackDeliverySchema), campaignController.ackDelivery);
+router.post('/:id/cancel', campaignController.cancelCampaign);
 exports.default = router;
 //# sourceMappingURL=campaign.routes.js.map

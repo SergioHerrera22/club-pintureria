@@ -1,4 +1,7 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const coupon_service_1 = require("../services/coupon.service");
@@ -11,6 +14,7 @@ const email_service_1 = require("../services/email.service");
 const prisma_1 = require("../config/prisma");
 const errorHandler_1 = require("../middleware/errorHandler");
 const auth_1 = require("../middleware/auth");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const router = (0, express_1.Router)();
 // Todas las rutas requieren autenticación y rol CLIENTE
 router.use(auth_1.authenticate, (0, auth_1.authorize)('CLIENTE'));
@@ -622,6 +626,84 @@ router.put('/professional', async (req, res, next) => {
             create: { clientId: user.id, specialty, company, position, location, phone, website, socialMedia, preferredBrands, preferredCategories },
         });
         res.json({ profile });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+// ===== PERFIL DEL CLIENTE =====
+router.get('/profile', async (req, res, next) => {
+    try {
+        const user = req.user;
+        const dbUser = await prisma_1.prisma.user.findUnique({
+            where: { id: user.id },
+            select: {
+                id: true, firstName: true, lastName: true, dni: true,
+                email: true, phone: true, birthDate: true, createdAt: true,
+            },
+        });
+        if (!dbUser)
+            throw new errorHandler_1.AppError(404, 'Cliente no encontrado');
+        res.json({ client: dbUser });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+router.put('/profile', async (req, res, next) => {
+    try {
+        const user = req.user;
+        const { firstName, lastName, phone, birthDate, email } = req.body;
+        const data = {};
+        if (typeof firstName === 'string' && firstName.trim())
+            data.firstName = firstName.trim();
+        if (typeof lastName === 'string' && lastName.trim())
+            data.lastName = lastName.trim();
+        if (typeof phone === 'string')
+            data.phone = phone.trim() || null;
+        if (typeof email === 'string' && email.trim())
+            data.email = email.trim().toLowerCase();
+        if (typeof birthDate === 'string') {
+            if (birthDate && isNaN(Date.parse(birthDate)))
+                throw new errorHandler_1.AppError(400, 'Fecha de nacimiento inválida');
+            data.birthDate = birthDate ? new Date(birthDate) : null;
+        }
+        // El email es único: si cambió y ya existe en otro usuario, no se guarda.
+        if (data.email && data.email !== user.email) {
+            const taken = await prisma_1.prisma.user.findUnique({ where: { email: data.email } });
+            if (taken)
+                throw new errorHandler_1.AppError(400, 'Ese correo ya está registrado');
+        }
+        const updated = await prisma_1.prisma.user.update({
+            where: { id: user.id },
+            data,
+            select: {
+                id: true, firstName: true, lastName: true, dni: true,
+                email: true, phone: true, birthDate: true,
+            },
+        });
+        res.json({ client: updated, message: 'Perfil actualizado' });
+    }
+    catch (error) {
+        next(error);
+    }
+});
+router.put('/password', async (req, res, next) => {
+    try {
+        const user = req.user;
+        const { currentPassword, newPassword } = req.body;
+        const dbUser = await prisma_1.prisma.user.findUnique({ where: { id: user.id } });
+        if (!dbUser)
+            throw new errorHandler_1.AppError(404, 'Cliente no encontrado');
+        const isValid = await bcryptjs_1.default.compare(String(currentPassword || ''), dbUser.passwordHash);
+        if (!isValid)
+            throw new errorHandler_1.AppError(400, 'La contraseña actual no coincide');
+        if (String(newPassword || '').length < 6) {
+            throw new errorHandler_1.AppError(400, 'La nueva contraseña debe tener al menos 6 caracteres');
+        }
+        const passwordHash = await bcryptjs_1.default.hash(String(newPassword), 12);
+        await prisma_1.prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+        res.json({ message: 'Contraseña actualizada' });
     }
     catch (error) {
         next(error);

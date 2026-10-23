@@ -238,6 +238,260 @@ class CampaignService {
         }
         return result;
     }
+    /** Filtra una lista de destinatarios por ids (vacío/ausente = sin filtrar). */
+    static filterIds(list, ids) {
+        if (!ids || ids.length === 0)
+            return list;
+        const set = new Set(ids);
+        return list.filter((item) => set.has(item.id));
+    }
+    /**
+     * Audiencias automáticas de campaña:
+     * - near_prize: clientes que están a pocos puntos de un premio.
+     * - weekly_summary: clientes que compraron en los últimos N días.
+     * Devuelve los destinatarios con las variables extra de cada uno para que el
+     * mensaje se renderice con datos propios ({premio}, {faltan}, {puntos_semana}…).
+     */
+    static async getAudience(kind, opts = {}) {
+        const base = await this.getRecipients(opts.branchId);
+        const pool = this.filterIds(base.recipients, opts.recipientIds);
+        let recipients = [];
+        if (kind === 'near_prize') {
+            const maxFaltan = opts.maxFaltan && opts.maxFaltan > 0 ? Math.floor(opts.maxFaltan) : 500;
+            const prizes = await prisma_1.prisma.prize.findMany({
+                where: { isActive: true, status: 'DISPONIBLE', pointsCost: { gt: 0 } },
+                select: { name: true, pointsCost: true },
+                orderBy: { pointsCost: 'asc' },
+            });
+            if (prizes.length > 0) {
+                for (const r of pool) {
+                    // Premio más cercano: el de menor costo que todavía no alcanzó.
+                    const target = prizes.find((p) => p.pointsCost > r.currentPoints);
+                    if (!target)
+                        continue;
+                    const faltan = target.pointsCost - r.currentPoints;
+                    if (faltan > maxFaltan)
+                        continue;
+                    recipients.push({ ...r, extra: { premio: target.name, faltan } });
+                }
+            }
+        }
+        else {
+            const days = opts.days && opts.days > 0 ? Math.min(Math.floor(opts.days), 90) : 7;
+            const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+            const rows = await prisma_1.prisma.purchase.groupBy({
+                by: ['clientId'],
+                where: { status: 'COMPLETADA', createdAt: { gte: since } },
+                _count: { _all: true },
+                _sum: { pointsEarned: true },
+            });
+            const byId = new Map(rows.map((row) => [row.clientId, row]));
+            recipients = pool
+                .filter((r) => byId.has(r.id))
+                .map((r) => {
+                const agg = byId.get(r.id);
+                return {
+                    ...r,
+                    extra: {
+                        puntos_semana: agg._sum.pointsEarned ?? 0,
+                        compras_semana: agg._count._all,
+                        periodo: days,
+                    },
+                };
+            });
+        }
+        const withPhone = recipients.filter((r) => !!r.phone && r.phone.trim().length > 0).length;
+        return { kind, recipients, total: recipients.length, withPhone, withoutPhone: recipients.length - withPhone };
+    }
+    /**
+     * Inicia una campaña persistiéndola: un registro Campaign y un CampaignDelivery
+     * por destinatario (PENDIENTE u OMITIDO). El frontend va marcando cada entrega
+     * con ackDelivery; un destinatario sólo puede pasar de PENDIENTE una vez, así
+     * que recargar la página o repetir el click no vuelve a enviar.
+     * Los envíos de prueba no crean registro.
+     */
+    static async startCampaign(input, createdById) {
+        const message = (input.message || '').trim();
+        if (!message) {
+            throw new errorHandler_1.AppError(400, 'El mensaje no puede estar vacío');
+        }
+        if (input.testPhone && input.testPhone.trim()) {
+            // Los envíos de prueba no persisten nada: reutilizamos el flujo de prepare.
+            const { audience: _audience, maxFaltan: _maxFaltan, days: _days, ...testInput } = input;
+            const prep = await this.prepareCampaign(testInput);
+            return { campaignId: null, isTest: prep.isTest, messages: prep.messages, skipped: prep.skipped };
+        }
+        const company = await systemConfig_service_1.SystemConfigService.getCompanyName();
+        let pool;
+        if (input.audience) {
+            const aud = await this.getAudience(input.audience, {
+                branchId: input.branchId,
+                recipientIds: input.recipientIds,
+                maxFaltan: input.maxFaltan,
+                days: input.days,
+            });
+            pool = aud.recipients;
+        }
+        else {
+            pool = (await this.resolveRecipients(input)).map((r) => ({ ...r, extra: {} }));
+        }
+        const messages = [];
+        const skipped = [];
+        const pendingRows = [];
+        const skippedRows = [];
+        for (const recipient of pool) {
+            const name = `${recipient.firstName} ${recipient.lastName}`.trim();
+            const label = `${name} (${recipient.dni})`;
+            if (!recipient.phone || !recipient.phone.trim()) {
+                skipped.push({ name: label, phone: null, reason: 'Sin teléfono' });
+                skippedRows.push({
+                    clientId: recipient.id, clientName: name, dni: recipient.dni, phone: null,
+                    message, status: 'OMITIDO', reason: 'Sin teléfono',
+                });
+                continue;
+            }
+            const phone = whatsapp_service_1.whatsappService.formatPhoneNumber(recipient.phone);
+            if (!phone) {
+                skipped.push({ name: label, phone: recipient.phone, reason: 'Teléfono inválido para WhatsApp' });
+                skippedRows.push({
+                    clientId: recipient.id, clientName: name, dni: recipient.dni, phone: recipient.phone,
+                    message, status: 'OMITIDO', reason: 'Teléfono inválido para WhatsApp',
+                });
+                continue;
+            }
+            const rendered = whatsapp_service_1.whatsappService.renderTemplate(message, {
+                nombre: recipient.firstName,
+                apellido: recipient.lastName,
+                dni: recipient.dni,
+                puntos: recipient.lastPointsEarned,
+                total: recipient.currentPoints,
+                empresa: company,
+                ...recipient.extra,
+            });
+            messages.push({ id: recipient.id, name: label, phone, message: rendered });
+            pendingRows.push({
+                clientId: recipient.id, clientName: name, dni: recipient.dni, phone: recipient.phone,
+                message: rendered, status: 'PENDIENTE',
+            });
+        }
+        if (messages.length === 0 && skipped.length === 0) {
+            throw new errorHandler_1.AppError(400, 'La campaña no tiene destinatarios para el criterio elegido');
+        }
+        const campaign = await prisma_1.prisma.campaign.create({
+            data: {
+                name: (message.split('\n')[0] || message).trim().slice(0, 60) || 'Campaña',
+                message,
+                audience: input.audience ?? null,
+                branchId: input.branchId ?? null,
+                scope: input.recipientIds && input.recipientIds.length > 0 ? 'SELECCIONADOS' : 'TODOS',
+                createdById: createdById ?? null,
+                deliveries: {
+                    create: [...pendingRows, ...skippedRows],
+                },
+            },
+        });
+        return { campaignId: campaign.id, isTest: false, messages, skipped };
+    }
+    /** Campañas sin terminar (para ofrecer "Retomar envío" al volver a entrar). */
+    static async getActiveCampaigns(limit = 5) {
+        const campaigns = await prisma_1.prisma.campaign.findMany({
+            where: { status: 'ENVIANDO' },
+            orderBy: { createdAt: 'desc' },
+            take: limit,
+            include: { deliveries: { select: { status: true } } },
+        });
+        return campaigns.map((c) => {
+            const total = c.deliveries.length;
+            const sent = c.deliveries.filter((d) => d.status === 'ENVIADO').length;
+            const skipped = c.deliveries.filter((d) => d.status !== 'ENVIADO' && d.status !== 'PENDIENTE').length;
+            return {
+                id: c.id,
+                name: c.name,
+                audience: c.audience,
+                status: c.status,
+                createdAt: c.createdAt,
+                total,
+                sent,
+                skipped,
+                pending: total - sent - skipped,
+            };
+        });
+    }
+    /** Progreso de una campaña + los destinatarios todavía pendientes. */
+    static async getCampaign(id) {
+        const c = await prisma_1.prisma.campaign.findUnique({
+            where: { id },
+            include: { deliveries: { orderBy: { createdAt: 'asc' } } },
+        });
+        if (!c)
+            throw new errorHandler_1.AppError(404, 'Campaña no encontrada');
+        const messages = [];
+        for (const d of c.deliveries) {
+            if (d.status !== 'PENDIENTE' || !d.phone)
+                continue;
+            const phone = whatsapp_service_1.whatsappService.formatPhoneNumber(d.phone);
+            if (!phone)
+                continue;
+            messages.push({ id: d.clientId, name: `${d.clientName} (${d.dni})`, phone, message: d.message });
+        }
+        const total = c.deliveries.length;
+        const sent = c.deliveries.filter((d) => d.status === 'ENVIADO').length;
+        const skipped = c.deliveries.filter((d) => d.status !== 'ENVIADO' && d.status !== 'PENDIENTE').length;
+        return {
+            progress: {
+                id: c.id,
+                name: c.name,
+                audience: c.audience,
+                status: c.status,
+                createdAt: c.createdAt,
+                total,
+                sent,
+                skipped,
+                pending: total - sent - skipped,
+            },
+            messages,
+        };
+    }
+    /**
+     * Marca un destinatario como procesado. La actualización es condicional
+     * (sólo si sigue PENDIENTE): si ya estaba marcado, no se pisa el estado
+     * y se devuelve alreadyProcessed=true. Al no quedar pendientes, la campaña
+     * pasa a COMPLETADA.
+     */
+    static async ackDelivery(campaignId, clientId, status, reason) {
+        const existing = await prisma_1.prisma.campaignDelivery.findUnique({
+            where: { campaignId_clientId: { campaignId, clientId } },
+            select: { status: true },
+        });
+        if (!existing)
+            throw new errorHandler_1.AppError(404, 'Destinatario no encontrado en esta campaña');
+        let currentStatus = existing.status;
+        if (existing.status === 'PENDIENTE') {
+            await prisma_1.prisma.campaignDelivery.updateMany({
+                where: { campaignId, clientId, status: 'PENDIENTE' },
+                data: { status, reason: reason ?? null, sentAt: status === 'ENVIADO' ? new Date() : null },
+            });
+            currentStatus = status;
+        }
+        const pending = await prisma_1.prisma.campaignDelivery.count({ where: { campaignId, status: 'PENDIENTE' } });
+        if (pending === 0) {
+            await prisma_1.prisma.campaign.updateMany({ where: { id: campaignId, status: 'ENVIANDO' }, data: { status: 'COMPLETADA' } });
+        }
+        return { status: currentStatus, alreadyProcessed: existing.status !== 'PENDIENTE', pending };
+    }
+    /** Descarta una campaña: los pendientes quedan OMITIDos y el registro, CANCELADA. */
+    static async cancelCampaign(id) {
+        const campaign = await prisma_1.prisma.campaign.findUnique({ where: { id }, select: { id: true } });
+        if (!campaign)
+            throw new errorHandler_1.AppError(404, 'Campaña no encontrada');
+        await prisma_1.prisma.$transaction([
+            prisma_1.prisma.campaignDelivery.updateMany({
+                where: { campaignId: id, status: 'PENDIENTE' },
+                data: { status: 'OMITIDO', reason: 'Campaña descartada' },
+            }),
+            prisma_1.prisma.campaign.update({ where: { id }, data: { status: 'CANCELADA' } }),
+        ]);
+    }
 }
 exports.CampaignService = CampaignService;
 //# sourceMappingURL=campaign.service.js.map

@@ -3,8 +3,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.logout = exports.changePassword = exports.updateProfile = exports.getMe = exports.refreshToken = exports.login = exports.register = exports.generateTokens = void 0;
+exports.resetPassword = exports.forgotPassword = exports.logout = exports.changePassword = exports.updateProfile = exports.getMe = exports.refreshToken = exports.login = exports.register = exports.generateTokens = void 0;
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
+const crypto_1 = __importDefault(require("crypto"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = require("../config/prisma");
 const config_1 = require("../config");
@@ -213,4 +214,79 @@ const logout = async (req, res) => {
     res.json({ message: 'Sesión cerrada correctamente' });
 };
 exports.logout = logout;
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutos
+const hashResetToken = (token) => crypto_1.default.createHash('sha256').update(token).digest('hex');
+/** URL base del frontend: FRONTEND_URL si está definida, si no el mismo origen. */
+const buildFrontendUrl = (req) => {
+    const envUrl = (process.env.FRONTEND_URL || '').trim();
+    if (envUrl)
+        return envUrl.replace(/\/$/, '');
+    const host = req.get('host');
+    return host ? `${req.protocol}://${host}` : config_1.config.frontendUrl.replace(/\/$/, '');
+};
+/**
+ * Recuperación de contraseña (empleados/admin). Siempre responde lo mismo para
+ * no revelar si el correo existe; el enlace se envía sólo a usuarios activos
+ * que no sean clientes (los clientes usan el portal /users).
+ */
+const forgotPassword = async (req, res, next) => {
+    try {
+        const email = String(req.body?.email || '').trim().toLowerCase();
+        const user = email
+            ? await prisma_1.prisma.user.findFirst({
+                where: { email, isActive: true, role: { not: 'CLIENTE' } },
+            })
+            : null;
+        if (user) {
+            try {
+                const token = crypto_1.default.randomBytes(32).toString('hex');
+                await prisma_1.prisma.passwordResetToken.create({
+                    data: {
+                        userId: user.id,
+                        tokenHash: hashResetToken(token),
+                        expiresAt: new Date(Date.now() + RESET_TOKEN_TTL_MS),
+                    },
+                });
+                const link = `${buildFrontendUrl(req)}/reset-password?token=${token}`;
+                const sent = await email_service_1.emailService.sendPasswordResetEmail(user.email, user.firstName, link);
+                if (!sent) {
+                    console.warn('No se pudo enviar el correo de recuperación (SMTP sin configurar o con error)');
+                }
+            }
+            catch (err) {
+                // Nunca filtramos el detalle al cliente final; lo dejamos en el log.
+                console.error('Error al generar el enlace de recuperación:', err);
+            }
+        }
+        res.json({
+            message: 'Si el correo está registrado, te enviaremos un enlace para restablecer tu contraseña.',
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.forgotPassword = forgotPassword;
+/** Consumo del enlace: valida el token (un solo uso y no vencido) y guarda la clave nueva. */
+const resetPassword = async (req, res, next) => {
+    try {
+        const { token, password } = req.body;
+        const record = await prisma_1.prisma.passwordResetToken.findUnique({
+            where: { tokenHash: hashResetToken(String(token || '')) },
+        });
+        if (!record || record.usedAt || record.expiresAt.getTime() < Date.now()) {
+            throw new errorHandler_1.AppError(400, 'El enlace no es válido o venció. Pedí uno nuevo.');
+        }
+        const passwordHash = await bcryptjs_1.default.hash(password, 12);
+        await prisma_1.prisma.$transaction([
+            prisma_1.prisma.user.update({ where: { id: record.userId }, data: { passwordHash } }),
+            prisma_1.prisma.passwordResetToken.update({ where: { id: record.id }, data: { usedAt: new Date() } }),
+        ]);
+        res.json({ message: 'Contraseña actualizada. Ya podés iniciar sesión.' });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.resetPassword = resetPassword;
 //# sourceMappingURL=auth.controller.js.map
