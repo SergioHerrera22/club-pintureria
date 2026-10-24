@@ -122,6 +122,14 @@ interface SaleResponse {
   };
   appliedPromotions: any[];
   appliedCoupon: any;
+  /** Si el cliente tiene cuenta corriente: reparto 70/30 de los puntos con el pintor */
+  currentAccount?: {
+    id: string;
+    clientPoints: number;
+    painterPoints: number;
+    painterName: string | null;
+    painterDni: string | null;
+  } | null;
   /** Mensaje para abrir WhatsApp Web (null si el cliente no tiene teléfono) */
   whatsapp?: SaleWhatsapp | null;
 }
@@ -271,7 +279,12 @@ export default function Sales() {
    * con el mensaje listo (bienvenida en la primera compra, puntos en el resto).
    */
   const finishSale = (response: SaleResponse, message: string) => {
-    setSuccess(message);
+    // Cuenta corriente: la venta repartió los puntos 70/30 con el pintor designado
+    const ca = response.currentAccount;
+    const finalMessage = ca
+      ? `${message} Cuenta corriente: ${ca.clientPoints} pts para el cliente y ${ca.painterPoints} pts para ${ca.painterName ?? 'el pintor'}.`
+      : message;
+    setSuccess(finalMessage);
     const wa = response.whatsapp;
     if (wa?.phone && wa.message) {
       setPendingWhatsapp(wa);
@@ -944,8 +957,19 @@ export default function Sales() {
               <div>
                 <p className="font-semibold text-gray-900 text-lg">
                   {client.firstName} {client.lastName}
+                  {client.currentAccount && (
+                    <span
+                      className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 align-middle"
+                      title={client.currentAccount.painterName ? `Reparto 70/30: pintor ${client.currentAccount.painterName}` : 'Cuenta corriente'}
+                    >
+                      Cuenta corriente
+                    </span>
+                  )}
                 </p>
-                <p className="text-sm text-gray-500">DNI: {client.dni}</p>
+                <p className="text-sm text-gray-500">
+                  DNI: {client.dni}
+                  {client.currentAccount?.painterName && ` · Pintor: ${client.currentAccount.painterName}`}
+                </p>
               </div>
               {client.clientProfile && (
                 <div className="flex items-center gap-4 ml-4">

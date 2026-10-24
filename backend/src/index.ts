@@ -27,6 +27,7 @@ import challengeRoutes from './routes/challenge.routes';
 import benefitRoutes from './routes/benefit.routes';
 import systemConfigRoutes from './routes/systemConfig.routes';
 import campaignRoutes from './routes/campaign.routes';
+import currentAccountRoutes from './routes/currentAccount.routes';
 
 const app = express();
 
@@ -106,6 +107,7 @@ app.use('/api/challenges', challengeRoutes);
 app.use('/api/benefits', benefitRoutes);
 app.use('/api/system-config', systemConfigRoutes);
 app.use('/api/campaigns', campaignRoutes);
+app.use('/api/current-accounts', currentAccountRoutes);
 
 // Servir el frontend (SPA) DESPUÉS de las rutas API y ANTES del 404
 if (frontendDist) {

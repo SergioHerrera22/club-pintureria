@@ -544,7 +544,14 @@ export const findClientByDni = async (req: AuthRequest, res: Response, next: Nex
         data: { userId: user.id },
       });
     }
-    
+
+    // Cuenta corriente activa (con pintor): el sistema la detecta solo y
+    // el reparto 70/30 de puntos ocurre automáticamente al registrar la venta.
+    const currentAccount = await prisma.currentAccount.findUnique({
+      where: { clientUserId: user.id },
+      include: { painter: { select: { firstName: true, lastName: true, dni: true } } },
+    });
+
     res.json({
       id: user.id,
       firstName: user.firstName,
@@ -555,6 +562,15 @@ export const findClientByDni = async (req: AuthRequest, res: Response, next: Nex
       birthDate: user.birthDate,
       isActive: user.isActive,
       clientProfile,
+      currentAccount: currentAccount && currentAccount.active
+        ? {
+            id: currentAccount.id,
+            painterName: currentAccount.painter
+              ? `${currentAccount.painter.firstName} ${currentAccount.painter.lastName}`
+              : null,
+            painterDni: currentAccount.painter?.dni ?? null,
+          }
+        : null,
     });
   } catch (error) {
     next(error);
@@ -775,6 +791,7 @@ export const registerPurchase = async (req: AuthRequest, res: Response, next: Ne
       },
       appliedPromotions: purchase.appliedPromotions,
       appliedCoupon: purchase.appliedCoupon,
+      currentAccount: (purchase as any).currentAccount ?? null,
       whatsapp,
     });
   } catch (error) {
@@ -1008,6 +1025,7 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
       },
       appliedPromotions: purchase.appliedPromotions,
       appliedCoupon: purchase.appliedCoupon,
+      currentAccount: (purchase as any).currentAccount ?? null,
       whatsapp,
     });
   } catch (error) {

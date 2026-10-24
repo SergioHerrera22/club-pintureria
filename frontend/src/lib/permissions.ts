@@ -17,6 +17,7 @@ export const MENU_ITEMS: MenuItem[] = [
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/vendedor/nuevo-cliente', roles: ['VENDEDOR'] },
   { key: 'clientes', label: 'Clientes', path: '/clients', roles: ['ADMIN', 'CAJERA', 'VENDEDOR'] },
   { key: 'ventas', label: 'Ventas', path: '/sales', roles: ['CAJERA'] },
+  { key: 'cuentas-corrientes', label: 'Cuentas Corrientes', path: '/current-accounts', roles: ['ADMIN', 'CAJERA', 'VENDEDOR'] },
   { key: 'mis-ventas', label: 'Mis Ventas', path: '/mis-ventas', roles: ['VENDEDOR', 'CAJERA'] },
   { key: 'usuarios', label: 'Usuarios', path: '/admin-users', roles: ['ADMIN'] },
   { key: 'revisiones-ventas', label: 'Revisiones de Ventas', path: '/sale-revisions', roles: ['ADMIN'] },
@@ -40,6 +41,7 @@ export const MENU_PERMISSION_OPTIONS: Array<MenuItem & { description: string }> 
   { key: 'nuevo-cliente', label: 'Nuevo Cliente', path: '/nuevo-cliente', roles: [], description: 'Dar de alta nuevos clientes' },
   { key: 'clientes', label: 'Clientes', path: '/clients', roles: [], description: 'Ver y editar clientes, ajustar puntos' },
   { key: 'ventas', label: 'Ventas', path: '/sales', roles: [], description: 'Registrar ventas y canjes' },
+  { key: 'cuentas-corrientes', label: 'Cuentas Corrientes', path: '/current-accounts', roles: [], description: 'Cuentas corrientes, pintores y solicitudes de cambio' },
   { key: 'mis-ventas', label: 'Mis Ventas', path: '/mis-ventas', roles: [], description: 'Ver tus ventas y solicitar correcciones' },
   { key: 'usuarios', label: 'Usuarios', path: '/admin-users', roles: [], description: 'Gestionar usuarios del sistema' },
   { key: 'revisiones-ventas', label: 'Revisiones de Ventas', path: '/sale-revisions', roles: [], description: 'Aprobar o rechazar correcciones de ventas' },
@@ -63,8 +65,8 @@ export const MENU_PERMISSION_OPTIONS: Array<MenuItem & { description: string }> 
  */
 export const ROLE_DEFAULT_PERMISSIONS: Record<string, string[]> = {
   ADMIN: MENU_PERMISSION_OPTIONS.map((o) => o.key),
-  CAJERA: ['dashboard', 'nuevo-cliente', 'clientes', 'ventas', 'mis-ventas', 'campanas', 'premios', 'promociones', 'cupones', 'desafios', 'beneficios'],
-  VENDEDOR: ['nuevo-cliente', 'clientes', 'mis-ventas'],
+  CAJERA: ['dashboard', 'nuevo-cliente', 'clientes', 'ventas', 'cuentas-corrientes', 'mis-ventas', 'campanas', 'premios', 'promociones', 'cupones', 'desafios', 'beneficios'],
+  VENDEDOR: ['nuevo-cliente', 'clientes', 'cuentas-corrientes', 'mis-ventas'],
   CLIENTE: [],
 };
 

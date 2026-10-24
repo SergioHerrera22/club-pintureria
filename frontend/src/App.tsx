@@ -29,6 +29,7 @@ import ClientPrizes from './pages/ClientPrizes';
 import ClientPointsHistory from './pages/ClientPointsHistory';
 import ClientProfile from './pages/ClientProfile';
 import Sales from './pages/Sales';
+import CurrentAccounts from './pages/CurrentAccounts';
 import MisVentas from './pages/MisVentas';
 import SaleRevisions from './pages/SaleRevisions';
 import Branches from './pages/Branches';
@@ -124,6 +125,7 @@ function App() {
         <Route path="/dashboard" element={<ProtectedRoute permission="dashboard"><Dashboard /></ProtectedRoute>} />
         <Route path="/nuevo-cliente" element={<ProtectedRoute permission="nuevo-cliente"><ClientRegister /></ProtectedRoute>} />
         <Route path="/sales" element={<ProtectedRoute permission="ventas"><Sales /></ProtectedRoute>} />
+        <Route path="/current-accounts" element={<ProtectedRoute allowedRoles={['ADMIN', 'CAJERA', 'VENDEDOR']} permission="cuentas-corrientes"><CurrentAccounts /></ProtectedRoute>} />
         <Route path="/mis-ventas" element={<ProtectedRoute permission="mis-ventas"><MisVentas /></ProtectedRoute>} />
         <Route path="/sale-revisions" element={<ProtectedRoute allowedRoles={['ADMIN']} permission="revisiones-ventas"><SaleRevisions /></ProtectedRoute>} />
         <Route path="/campaigns" element={<ProtectedRoute permission="campanas"><Campaigns /></ProtectedRoute>} />

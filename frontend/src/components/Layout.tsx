@@ -4,7 +4,7 @@ import { cn, getRoleLabel, getRoleColor } from '../lib/utils';
 import { MENU_ITEMS, hasMenuPermission, ADMIN_ONLY_MENU_KEYS } from '../lib/permissions';
 import logoUrl from '../assets/RC.svg';
 // @ts-ignore
-import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle, Receipt, ClipboardCheck, type LucideIcon } from 'lucide-react';
+import { LayoutDashboard, Users, Package, Settings, LogOut, User, Tag, Menu, X, DollarSign, Building, Megaphone, Gift, Layers, Trophy, Ticket, UserCircle, UserPlus, MessageCircle, Receipt, ClipboardCheck, BookUser, type LucideIcon } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
 const navIcons: Record<string, LucideIcon> = {
@@ -12,6 +12,7 @@ const navIcons: Record<string, LucideIcon> = {
   'nuevo-cliente': UserPlus,
   clientes: Users,
   ventas: DollarSign,
+  'cuentas-corrientes': BookUser,
   'mis-ventas': Receipt,
   'revisiones-ventas': ClipboardCheck,
   usuarios: UserCircle,

@@ -18,6 +18,11 @@ interface ClientData {
   birthDate?: string;
   isActive: boolean;
   clientProfile: ClientProfile | null;
+  currentAccount?: {
+    id: string;
+    painterName: string | null;
+    painterDni: string | null;
+  } | null;
 }
 
 interface ClientState {

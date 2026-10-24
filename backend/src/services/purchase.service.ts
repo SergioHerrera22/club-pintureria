@@ -8,6 +8,7 @@ import { whatsappService } from './whatsapp.service';
 import { SystemConfigService } from './systemConfig.service';
 import { AppError } from '../middleware/errorHandler';
 import { TransactionType, PurchaseStatus, Prisma } from '@prisma/client';
+import { splitPoints } from './currentAccount.service';
 
 interface CreatePurchaseDTO {
   clientId: string;
@@ -72,11 +73,21 @@ interface PurchaseWithDetails {
   appliedPromotions: Array<{ promotion: any; points: number; discount: number }>;
   appliedCoupon: any | null;
   pointsBreakdown: any[];
+  /// Si la venta es de cuenta corriente: reparto 70/30 de puntos con el pintor
+  currentAccount: {
+    id: string;
+    clientPoints: number;
+    painterPoints: number;
+    painterName: string | null;
+    painterDni: string | null;
+  } | null;
 }
 
 export class PurchaseService {
   static async createPurchase(data: CreatePurchaseDTO): Promise<PurchaseWithDetails> {
     const txResult = await prisma.$transaction(async (tx) => {
+      // Pintor acreditado en la venta (si el cliente tiene cuenta corriente con pintor)
+      let painterCredit: { user: { id: string; firstName: string; lastName: string; dni: string; phone: string | null }; balance: number } | null = null;
       // 1. Validar cliente
       const client = await tx.user.findUnique({
         where: { id: data.clientId },
@@ -206,6 +217,16 @@ export class PurchaseService {
       // 11. Los puntos surgen exclusivamente de las reglas de puntos
       const finalPoints = pointsResult.totalPoints;
 
+      // 11b. Cuenta corriente: si el cliente tiene una cuenta activa con pintor
+      //      designado, el 70% del total de puntos va al cliente y el 30% al pintor.
+      const currentAccount = await tx.currentAccount.findUnique({
+        where: { clientUserId: client.id },
+        include: { painter: { select: { id: true, firstName: true, lastName: true, dni: true, phone: true } } },
+      });
+      const hasPainter = !!(currentAccount?.active && currentAccount.painter);
+      const { clientPoints, painterPoints } = splitPoints(finalPoints, hasPainter);
+      const painterUser = hasPainter ? currentAccount!.painter : null;
+
       // 12. Generar número de comprobante
       const today = new Date();
       const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
@@ -219,7 +240,7 @@ export class PurchaseService {
       });
       const receiptNumber = `VTA-${dateStr}-${String(count + 1).padStart(4, '0')}`;
 
-      const newBalance = client.clientProfile.currentPoints + finalPoints;
+      const newBalance = client.clientProfile.currentPoints + clientPoints;
 
       // 13. Crear Purchase
       const purchase = await tx.purchase.create({
@@ -234,6 +255,10 @@ export class PurchaseService {
           tax: finalTax,
           total: finalTotal,
           pointsEarned: finalPoints,
+          clientPoints,
+          painterPoints,
+          painterId: painterUser?.id ?? null,
+          currentAccountId: hasPainter ? currentAccount!.id : null,
           pointsBalance: newBalance,
           promotionIds: pointsResult.appliedPromotions.map(p => p.promotion.id),
           couponId: data.couponCode ? (await tx.coupon.findUnique({ where: { code: data.couponCode } }))?.id : null,
@@ -258,18 +283,65 @@ export class PurchaseService {
         include: { items: { include: { product: true } } },
       });
 
-      // 14. Actualizar perfil del cliente
-      const profile = await tx.clientProfile.findUnique({ where: { userId: client.id } });
-      if (!profile) throw new AppError(404, 'Perfil de cliente no encontrado');
-
+      // 14. Actualizar perfil del cliente (recibe su parte: 70% si hay pintor)
       await tx.clientProfile.update({
         where: { userId: client.id },
         data: {
           currentPoints: newBalance,
-          totalPointsEarned: { increment: finalPoints },
+          totalPointsEarned: { increment: clientPoints },
           lastPurchaseAt: new Date(),
         },
       });
+
+      // 14b. Acreditar al pintor su parte (30%) dentro de la misma transacción:
+      //      perfil de puntos + libro de movimientos + notificación in-app.
+      if (painterUser && painterPoints > 0) {
+        const painterProfile = await tx.clientProfile.findUnique({ where: { userId: painterUser.id } });
+        if (painterProfile) {
+          await tx.clientProfile.update({
+            where: { userId: painterUser.id },
+            data: {
+              currentPoints: { increment: painterPoints },
+              totalPointsEarned: { increment: painterPoints },
+            },
+          });
+        } else {
+          await tx.clientProfile.create({
+            data: {
+              userId: painterUser.id,
+              currentPoints: painterPoints,
+              totalPointsEarned: painterPoints,
+            },
+          });
+        }
+        const painterBalance = (painterProfile?.currentPoints ?? 0) + painterPoints;
+
+        await tx.transaction.create({
+          data: {
+            userId: painterUser.id,
+            type: TransactionType.BONIFICACION,
+            subtotal: 0,
+            tax: 0,
+            total: 0,
+            pointsEarned: painterPoints,
+            pointsBalance: painterBalance,
+            description: `30% de los puntos de la venta ${receiptNumber} (cliente con cuenta corriente ${client.firstName} ${client.lastName})`,
+            cashierId: cashier.id,
+          },
+        });
+
+        await tx.notification.create({
+          data: {
+            userId: painterUser.id,
+            type: 'POINTS_EARNED',
+            title: '¡Puntos ganados!',
+            message: `Ganaste ${painterPoints} puntos (30% de la venta ${receiptNumber} del cliente ${client.firstName} ${client.lastName})`,
+            metadata: { points: painterPoints, receiptNumber },
+          },
+        });
+
+        painterCredit = { user: painterUser as { id: string; firstName: string; lastName: string; dni: string; phone: string | null }, balance: painterBalance };
+      }
 
       // 17. Marcar bono de cumpleaños otorgado (idempotencia: evita doble bono con el cron)
       if (pointsResult.breakdown.some((b: any) => b.type === 'CUMPLEANOS')) {
@@ -290,10 +362,10 @@ export class PurchaseService {
         include: { clientProfile: true },
       });
 
-      return { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon };
+      return { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon, clientPoints, painterPoints, painterCredit };
     }, { timeout: 30000, maxWait: 15000 });
 
-    const { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon } = txResult;
+    const { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon, clientPoints, painterPoints, painterCredit } = txResult;
 
     // 15. Verificar y actualizar desafíos (fuera de la transacción)
     try {
@@ -308,11 +380,19 @@ export class PurchaseService {
         SystemConfigService.getNotificationsEnabled('email'),
         SystemConfigService.getNotificationsEnabled('whatsapp'),
       ]);
-      if (finalPoints > 0 && emailEnabled && client.email) {
-        await emailService.sendPointsEarnedEmail(client.email, client.firstName, finalPoints, newBalance);
+      if (clientPoints > 0 && emailEnabled && client.email) {
+        await emailService.sendPointsEarnedEmail(client.email, client.firstName, clientPoints, newBalance);
       }
-      if (finalPoints > 0 && whatsappEnabled && client.phone) {
-        await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, finalPoints, newBalance, {
+      if (clientPoints > 0 && whatsappEnabled && client.phone) {
+        await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, clientPoints, newBalance, {
+          amount: finalTotal,
+          receiptNumber: purchase.receiptNumber,
+          branchName: branch?.name ?? null,
+        });
+      }
+      // Aviso por WhatsApp al pintor si el canal está habilitado y tiene teléfono cargado
+      if (painterCredit && painterPoints > 0 && whatsappEnabled && painterCredit.user.phone) {
+        await whatsappService.sendPointsEarnedNotification(painterCredit.user.phone, painterCredit.user.firstName, painterPoints, painterCredit.balance, {
           amount: finalTotal,
           receiptNumber: purchase.receiptNumber,
           branchName: branch?.name ?? null,
@@ -323,7 +403,13 @@ export class PurchaseService {
     }
 
     // 18. Construir respuesta
-    return this.formatPurchaseResponse(purchase, clientWithProfile as any, branch, cashier, pointsResult, appliedCoupon);
+    return this.formatPurchaseResponse(purchase, clientWithProfile as any, branch, cashier, pointsResult, appliedCoupon, {
+      id: purchase.currentAccountId,
+      clientPoints,
+      painterPoints,
+      painterName: painterCredit ? `${painterCredit.user.firstName} ${painterCredit.user.lastName}` : null,
+      painterDni: painterCredit?.user.dni ?? null,
+    });
   }
 
   private static formatPurchaseResponse(
@@ -332,7 +418,8 @@ export class PurchaseService {
     branch: any,
     cashier: any,
     pointsResult: { totalPoints: number; breakdown: any[]; appliedPromotions: any[] },
-    appliedCoupon: any
+    appliedCoupon: any,
+    currentAccountInfo?: { id: string | null; clientPoints: number; painterPoints: number; painterName: string | null; painterDni: string | null }
   ): PurchaseWithDetails {
     return {
       id: purchase.id,
@@ -381,6 +468,15 @@ export class PurchaseService {
       appliedPromotions: pointsResult.appliedPromotions,
       appliedCoupon,
       pointsBreakdown: pointsResult.breakdown,
+      currentAccount: currentAccountInfo?.id
+        ? {
+            id: currentAccountInfo.id,
+            clientPoints: currentAccountInfo.clientPoints,
+            painterPoints: currentAccountInfo.painterPoints,
+            painterName: currentAccountInfo.painterName,
+            painterDni: currentAccountInfo.painterDni,
+          }
+        : null,
     };
   }
 
@@ -393,6 +489,7 @@ export class PurchaseService {
         },
         branch: { select: { id: true, name: true, code: true } },
         cashier: { select: { id: true, firstName: true, lastName: true } },
+        painter: { select: { id: true, firstName: true, lastName: true, dni: true } },
         items: { include: { product: { select: { id: true, name: true, code: true } } } },
       },
     });
@@ -446,6 +543,16 @@ export class PurchaseService {
       appliedPromotions: [],
       appliedCoupon: null,
       pointsBreakdown: [],
+      currentAccount:
+        purchase.currentAccountId && (purchase.clientPoints !== purchase.pointsEarned || purchase.painterPoints > 0)
+          ? {
+              id: purchase.currentAccountId,
+              clientPoints: purchase.clientPoints,
+              painterPoints: purchase.painterPoints,
+              painterName: purchase.painter ? `${purchase.painter.firstName} ${purchase.painter.lastName}` : null,
+              painterDni: purchase.painter?.dni ?? null,
+            }
+          : null,
     };
   }
 
@@ -525,14 +632,39 @@ export class PurchaseService {
     if (purchase.status === PurchaseStatus.CANCELADA) throw new AppError(400, 'Compra ya cancelada');
 
     return await prisma.$transaction(async (tx) => {
-      // Revertir puntos
+      // Revertir puntos del cliente (en cuenta corriente se acreditó el 70%)
+      const isSplit = !!purchase.currentAccountId;
+      const clientRevert = isSplit ? purchase.clientPoints : purchase.pointsEarned;
       await tx.clientProfile.update({
         where: { userId: purchase.clientId },
         data: {
-          currentPoints: { decrement: purchase.pointsEarned },
-          totalPointsEarned: { decrement: purchase.pointsEarned },
+          currentPoints: { decrement: clientRevert },
+          totalPointsEarned: { decrement: clientRevert },
         },
       });
+
+      // Revertir los puntos del pintor (30% de la cuenta corriente)
+      if (isSplit && purchase.painterId && purchase.painterPoints > 0) {
+        await tx.clientProfile.update({
+          where: { userId: purchase.painterId },
+          data: {
+            currentPoints: { decrement: purchase.painterPoints },
+            totalPointsEarned: { decrement: purchase.painterPoints },
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            userId: purchase.painterId,
+            type: TransactionType.AJUSTE_MANUAL,
+            subtotal: 0,
+            tax: 0,
+            total: 0,
+            pointsEarned: -purchase.painterPoints,
+            pointsBalance: (await tx.clientProfile.findUnique({ where: { userId: purchase.painterId } }))!.currentPoints,
+            description: `Cancelación de compra ${purchase.receiptNumber} (puntos del pintor)`,
+          },
+        });
+      }
 
       // Crear transacción de reversión
       await tx.transaction.create({
@@ -541,8 +673,8 @@ export class PurchaseService {
           type: TransactionType.AJUSTE_MANUAL,
           subtotal: 0,
           total: 0,
-          pointsEarned: -purchase.pointsEarned,
-          pointsBalance: (await tx.clientProfile.findUnique({ where: { userId: purchase.clientId } }))!.currentPoints - purchase.pointsEarned,
+          pointsEarned: -clientRevert,
+          pointsBalance: (await tx.clientProfile.findUnique({ where: { userId: purchase.clientId } }))!.currentPoints,
           description: `Cancelación de compra ${purchase.receiptNumber}`,
         },
       });

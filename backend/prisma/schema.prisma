@@ -39,6 +39,15 @@ model User {
   saleRevisionsReviewed  SaleRevision[]    @relation("SaleRevisionReviewedBy")
   vendorPurchases        Purchase[]        @relation("PurchaseVendor")
   passwordResetTokens    PasswordResetToken[]
+  /// Cuenta corriente de este cliente (_dueño_ de la cuenta)
+  currentAccount         CurrentAccount?   @relation("CurrentAccountClient")
+  /// Cuentas donde este usuario está designado como pintor (recibe el 30% de los puntos)
+  currentAccountsAsPintor CurrentAccount[] @relation("CurrentAccountPainter")
+  currentAccountsCreated CurrentAccount[] @relation("CurrentAccountCreatedBy")
+  accountRevisionsRequested CurrentAccountRevision[] @relation("AccountRevisionRequestedBy")
+  accountRevisionsReviewed  CurrentAccountRevision[] @relation("AccountRevisionReviewedBy")
+  /// Ventas de cuenta corriente en las que este usuario acreditó los puntos como pintor
+  painterPurchases       Purchase[]        @relation("PurchasePainter")
 
   @@index([dni])
   @@index([email])
@@ -372,12 +381,21 @@ model Purchase {
   notes         String?
   /// Vendedor acreditado con la venta (la cajera registra, el vendedor atiende)
   vendorId      String?
+  /// Cuenta corriente asociada (si el cliente tiene cuenta corriente activa)
+  currentAccountId String?
+  /// Reparto 70/30 de puntos: neto para el cliente / neto para el pintor
+  clientPoints  Int            @default(0)
+  painterPoints Int            @default(0)
+  /// Pintor que acreditó los puntos de esta venta
+  painterId     String?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   branch        Branch         @relation(fields: [branchId], references: [id])
   cashier       User           @relation("PurchaseCashier", fields: [cashierId], references: [id])
   client        User           @relation("PurchaseClient", fields: [clientId], references: [id])
   vendor        User?          @relation("PurchaseVendor", fields: [vendorId], references: [id])
+  painter       User?          @relation("PurchasePainter", fields: [painterId], references: [id])
+  currentAccount CurrentAccount? @relation(fields: [currentAccountId], references: [id])
   items         PurchaseItem[]
   revisions     SaleRevision[]
 
@@ -386,6 +404,7 @@ model Purchase {
   @@index([receiptNumber])
   @@index([cashierId, createdAt])
   @@index([vendorId, createdAt])
+  @@index([currentAccountId])
 }
 
 model PurchaseItem {
@@ -444,6 +463,58 @@ model SaleRevision {
   reviewedBy    User?              @relation("SaleRevisionReviewedBy", fields: [reviewedById], references: [id])
 
   @@index([purchaseId])
+  @@index([status, createdAt])
+  @@index([requestedById, createdAt])
+}
+
+/// Cuenta corriente de un cliente. Le permite comprar y abonar después;
+/// el pintor designado cobra el 30% de los puntos de cada venta (el cliente el 70%).
+model CurrentAccount {
+  id             String   @id @default(cuid())
+  /// Cliente dueño de la cuenta corriente
+  clientUserId   String   @unique
+  /// Pintor designado (recibe el 30% de los puntos de cada venta). Puede cambiar
+  /// con el tiempo; se reemplaza y se conserva el historial de ventas.
+  painterUserId  String?
+  active         Boolean  @default(true)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  client         User     @relation("CurrentAccountClient", fields: [clientUserId], references: [id])
+  painter        User?    @relation("CurrentAccountPainter", fields: [painterUserId], references: [id])
+  createdBy      User?    @relation("CurrentAccountCreatedBy", fields: [createdById], references: [id])
+  purchases      Purchase[]
+  editRequests   CurrentAccountRevision[]
+
+  @@index([painterUserId])
+  @@index([active])
+}
+
+/// Solicitud de corrección de una cuenta corriente hecha por cajera/vendedor.
+/// Indica los campos a cambiar y sus nuevos valores; el administrador los aprueba
+/// (se aplican) o los rechaza (queda constancia).
+model CurrentAccountRevision {
+  id            String             @id @default(cuid())
+  accountId     String
+  requestedById String
+  status        SaleRevisionStatus @default(PENDIENTE)
+  /// Cambios propuestos: { newPainterDni?, active?, notes? }
+  changes       Json
+  /// Snapshot del estado original de la cuenta al momento de la solicitud
+  originalData  Json
+  /// Motivo de la cajera/vendedor para pedir el cambio
+  observation   String
+  adminResponse String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  account       CurrentAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  requestedBy   User               @relation("AccountRevisionRequestedBy", fields: [requestedById], references: [id])
+  reviewedBy    User?              @relation("AccountRevisionReviewedBy", fields: [reviewedById], references: [id])
+
+  @@index([accountId])
   @@index([status, createdAt])
   @@index([requestedById, createdAt])
 }

@@ -3,6 +3,7 @@ import { PointsService } from './points.service';
 import { AppError } from '../middleware/errorHandler';
 import { SaleRevisionStatus, PurchaseStatus, TransactionType, Prisma } from '@prisma/client';
 import { resolveBranchScope, NO_BRANCH } from '../middleware/auth';
+import { splitPoints } from './currentAccount.service';
 
 /**
  * Comienzo del día "hoy" en hora Argentina (UTC-3).
@@ -554,31 +555,72 @@ export class SaleRevisionService {
     );
     const newPoints = pointsResult.totalPoints;
 
-    // Deltas de puntos por cliente
-    const profiles = await prisma.clientProfile.findMany({
-      where: { userId: { in: oldClientId === newClientId ? [oldClientId] : [oldClientId, newClientId] } },
+    // Deltas de puntos por cliente y pintor.
+    // Las ventas de cuenta corriente reparten 70/30 entre cliente y pintor:
+    // se revierte la parte de cada uno y se acredita la nueva parte recalculada.
+    const sameClient = oldClientId === newClientId;
+
+    // ¿El cliente destino tiene cuenta corriente activa con pintor?
+    const newAccount = await prisma.currentAccount.findUnique({
+      where: { clientUserId: newClientId },
+      include: { painter: { select: { id: true } } },
     });
-    const profileMap = new Map(profiles.map(p => [p.userId, p]));
+    const newHasPainter = !!(newAccount?.active && newAccount.painter);
+    const newSplit = splitPoints(newPoints, newHasPainter);
+    const newPainterId = newHasPainter ? newAccount!.painter!.id : null;
 
-    const oldDelta = oldClientId === newClientId ? newPoints - purchase.pointsEarned : -purchase.pointsEarned;
-    const newDelta = oldClientId === newClientId ? oldDelta : newPoints;
+    // Deltas del CLIENTE
+    const oldClientDelta = -purchase.clientPoints;
+    const clientDelta = sameClient
+      ? oldClientDelta + newSplit.clientPoints
+      : newSplit.clientPoints;
 
-    const oldProfile = profileMap.get(oldClientId);
-    const newProfile = profileMap.get(newClientId);
+    // Deltas del PINTOR: se revierte la parte histórica y se acredita la nueva al pintor vigente
+    const oldPainterId = purchase.painterId;
+    const oldPainterDelta = -purchase.painterPoints;
+    const painterSame = !!oldPainterId && newPainterId === oldPainterId;
+    // (si cambia el pintor: el viejo recibe -purchase.painterPoints y el nuevo +newSplit.painterPoints;
+    //  si es el mismo pintor y mismo cliente: delta neto)
+    const newPainterDelta = newPainterId
+      ? (sameClient && painterSame ? newSplit.painterPoints - purchase.painterPoints : newSplit.painterPoints)
+      : 0;
+
+    // Perfiles involucrados
+    const involvedUserIds = [oldClientId, newClientId, oldPainterId, newPainterId]
+      .filter((v): v is string => !!v);
+    const involvedProfiles = await prisma.clientProfile.findMany({
+      where: { userId: { in: involvedUserIds } },
+    });
+    const involvedMap = new Map(involvedProfiles.map(p => [p.userId, p]));
+
+    const deltas = new Map<string, number>();
+    const addDelta = (userId: string | null, delta: number) => {
+      if (!userId || delta === 0) return;
+      deltas.set(userId, (deltas.get(userId) ?? 0) + delta);
+    };
+    addDelta(sameClient ? newClientId : oldClientId, sameClient ? clientDelta : oldClientDelta);
+    if (!sameClient) addDelta(newClientId, clientDelta);
+    addDelta(oldPainterId, painterSame ? oldPainterDelta + newPainterDelta : oldPainterDelta);
+    if (newPainterId && !(sameClient && painterSame)) addDelta(newPainterId, newPainterDelta);
+
+    // Validar que ningún perfil quede en negativo y que perfiles/cliente existan
+    const newProfile = involvedMap.get(newClientId);
     if (!newProfile) throw new AppError(400, 'El cliente destino no tiene perfil de puntos');
-    if (oldClientId !== newClientId && !oldProfile) throw new AppError(400, 'El cliente original no tiene perfil de puntos');
-
-    if (oldProfile && oldProfile.currentPoints + oldDelta < 0) {
-      throw new AppError(400, 'El cliente original no tiene puntos suficientes para revertir esta venta (puede haber canjeado). Rechazá la solicitud o ajustá los puntos manualmente.');
+    if (!sameClient && !involvedMap.has(oldClientId)) {
+      throw new AppError(400, 'El cliente original no tiene perfil de puntos');
     }
-    if (newProfile.currentPoints + newDelta < 0) {
-      throw new AppError(400, 'El cliente quedaría con puntos negativos. Rechazá la solicitud o ajustá los puntos manualmente.');
+    for (const [userId, delta] of deltas) {
+      const prof = involvedMap.get(userId);
+      if (!prof) throw new AppError(400, `El usuario ${userId} no tiene perfil de puntos (contactá al administrador)`);
+      if (prof.currentPoints + delta < 0) {
+        throw new AppError(400, 'Alguna de las partes no tiene puntos suficientes para revertir esta venta (puede haber canjeado). Rechazá la solicitud o ajustá los puntos manualmente.');
+      }
     }
 
-    const newBalance = newProfile.currentPoints + newDelta;
+    const newBalance = newProfile.currentPoints + clientDelta;
 
     const result = await prisma.$transaction(async (tx) => {
-      // 1. Actualizar la venta (items + totales + puntos)
+      // 1. Actualizar la venta (items + totales + puntos + reparto cuenta corriente)
       const updated = await tx.purchase.update({
         where: { id: purchase.id },
         data: {
@@ -589,6 +631,10 @@ export class SaleRevisionService {
           total,
           pointsEarned: newPoints,
           pointsBalance: newBalance,
+          clientPoints: newSplit.clientPoints,
+          painterPoints: newSplit.painterPoints,
+          painterId: newPainterId,
+          currentAccountId: newPainterId ? newAccount!.id : null,
           notes: typeof changes.notes === 'string' ? changes.notes : purchase.notes,
           items: {
             deleteMany: {},
@@ -605,50 +651,35 @@ export class SaleRevisionService {
         },
       });
 
-      // 2. Ajustar perfiles de puntos
-      if (oldClientId !== newClientId && oldProfile) {
+      // 2. Ajustar perfiles de puntos (cliente/s y pintor/es) con libro de movimientos
+      for (const [userId, delta] of deltas) {
+        const prof = involvedMap.get(userId)!;
         await tx.clientProfile.update({
-          where: { userId: oldClientId },
+          where: { userId },
           data: {
-            currentPoints: { decrement: purchase.pointsEarned },
-            totalPointsEarned: { decrement: purchase.pointsEarned },
+            currentPoints: { increment: delta },
+            totalPointsEarned: delta >= 0 ? { increment: delta } : { decrement: Math.abs(delta) },
           },
         });
         await tx.transaction.create({
           data: {
-            userId: oldClientId,
+            userId,
             type: TransactionType.AJUSTE_MANUAL,
             subtotal: 0,
             tax: 0,
             total: 0,
-            pointsEarned: -purchase.pointsEarned,
-            pointsBalance: oldProfile.currentPoints - purchase.pointsEarned,
-            description: `Revisión de venta ${purchase.receiptNumber}: venta reasignada a otro cliente`,
+            pointsEarned: delta,
+            pointsBalance: prof.currentPoints + delta,
+            description: `Revisión de venta ${purchase.receiptNumber} aprobada (${delta >= 0 ? '+' : ''}${delta} puntos)`,
           },
         });
+        if (userId === newClientId && !sameClient) {
+          await tx.clientProfile.update({
+            where: { userId },
+            data: { lastPurchaseAt: new Date() },
+          });
+        }
       }
-
-      await tx.clientProfile.update({
-        where: { userId: newClientId },
-        data: {
-          currentPoints: { increment: newDelta },
-          totalPointsEarned: newDelta >= 0 ? { increment: newDelta } : { decrement: Math.abs(newDelta) },
-          ...(oldClientId !== newClientId ? { lastPurchaseAt: new Date() } : {}),
-        },
-      });
-
-      await tx.transaction.create({
-        data: {
-          userId: newClientId,
-          type: TransactionType.AJUSTE_MANUAL,
-          subtotal: 0,
-          tax: 0,
-          total: 0,
-          pointsEarned: newDelta,
-          pointsBalance: newBalance,
-          description: `Revisión de venta ${purchase.receiptNumber} aprobada (${newDelta >= 0 ? '+' : ''}${newDelta} puntos)`,
-        },
-      });
 
       // 3. Marcar la solicitud como aprobada
       const approved = await tx.saleRevision.update({
