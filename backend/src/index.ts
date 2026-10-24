@@ -69,7 +69,7 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'client-portal-1';
+const APP_VERSION = 'current-accounts-1';
 
 app.get('/health', async (req, res) => {
   let db = 'ok';
