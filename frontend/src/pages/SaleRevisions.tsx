@@ -21,6 +21,8 @@ interface RevisionChanges {
   newClientId?: string;
   newClientName?: string;
   notes?: string;
+  /** Nuevo total pedido por la cajera (flujo: sólo monto + motivo) */
+  newTotal?: number;
 }
 
 interface RevisionOriginal {
@@ -109,6 +111,7 @@ export default function SaleRevisions() {
   const [rejectTarget, setRejectTarget] = useState<SaleRevision | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [approveNote, setApproveNote] = useState('');
+  const [approveAmounts, setApproveAmounts] = useState<Record<string, string>>({});
   const [error, setError] = useState('');
 
   const load = useCallback(async (p = page, t: Tab = tab) => {
@@ -139,9 +142,29 @@ export default function SaleRevisions() {
   const approve = async (revision: SaleRevision) => {
     setActionLoading(revision.id);
     setError('');
+    // En el flujo nuevo la cajera pide sólo el monto; el admin puede corregirlo acá.
+    let newTotal: number | undefined;
+    if (revision.changes.newTotal != null) {
+      const raw = (approveAmounts[revision.id] ?? String(revision.preview?.total ?? revision.changes.newTotal)).replace(',', '.');
+      const val = Number(raw);
+      if (!Number.isFinite(val) || val <= 0) {
+        setError('El monto a aplicar debe ser mayor a 0');
+        setActionLoading(null);
+        return;
+      }
+      newTotal = val;
+    }
     try {
-      await api.post(`/purchases/revisions/${revision.id}/approve`, { note: approveNote.trim() || undefined });
+      await api.post(`/purchases/revisions/${revision.id}/approve`, {
+        note: approveNote.trim() || undefined,
+        newTotal,
+      });
       setApproveNote('');
+      setApproveAmounts(prev => {
+        const next = { ...prev };
+        delete next[revision.id];
+        return next;
+      });
       await load(page, tab);
     } catch (err: any) {
       setError(err?.response?.data?.error || 'Error al aprobar la revisión');
@@ -270,10 +293,20 @@ export default function SaleRevisions() {
               {/* Cambios propuestos */}
               <div className="px-5 py-4 space-y-3">
                 <p className="text-sm font-medium text-gray-700">Cambios propuestos</p>
-                <ItemsComparison
-                  original={r.originalData.items ?? []}
-                  proposed={r.changes.items ?? r.originalData.items ?? []}
-                />
+                {r.changes.newTotal != null ? (
+                  <div className="border border-blue-100 bg-blue-50/50 rounded-lg px-3 py-2.5 text-sm">
+                    <span className="text-gray-600">Monto solicitado: </span>
+                    <strong className="text-gray-900">{formatCurrency(r.changes.newTotal)}</strong>
+                    <span className="text-xs text-gray-500 ml-2">
+                      (antes: {formatCurrency(r.originalData.total ?? r.purchase.total)}) · la venta mantiene sus productos; abajo podés aplicar otro monto si el pedido no es exacto
+                    </span>
+                  </div>
+                ) : (
+                  <ItemsComparison
+                    original={r.originalData.items ?? []}
+                    proposed={r.changes.items ?? r.originalData.items ?? []}
+                  />
+                )}
                 <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm">
                   <span className="text-gray-600">
                     Total: <strong>{formatCurrency(r.originalData.total ?? r.purchase.total)}</strong>
@@ -314,6 +347,17 @@ export default function SaleRevisions() {
               {/* Acciones o resolución */}
               {r.status === 'PENDIENTE' ? (
                 <div className="px-5 py-4 border-t border-gray-100 bg-gray-50 space-y-3">
+                  {r.changes.newTotal != null && (
+                    <div>
+                      <label className="text-xs font-medium text-gray-500 block mb-1">Monto a aplicar (podés corregirlo antes de aprobar)</label>
+                      <input
+                        value={approveAmounts[r.id] ?? String(r.preview?.total ?? r.changes.newTotal)}
+                        onChange={(e) => setApproveAmounts(prev => ({ ...prev, [r.id]: e.target.value }))}
+                        inputMode="decimal"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-green-500"
+                      />
+                    </div>
+                  )}
                   <input
                     value={approveNote}
                     onChange={(e) => setApproveNote(e.target.value)}

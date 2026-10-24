@@ -3,7 +3,7 @@ import api from '../lib/api';
 import { cn, formatCurrency, formatDateTime } from '../lib/utils';
 import {
   Search, Loader2, Receipt, Clock, CheckCircle2, XCircle, HelpCircle,
-  Plus, Minus, Trash2, X, RefreshCw, ChevronLeft, ChevronRight, Send, Package,
+  X, RefreshCw, ChevronLeft, ChevronRight, Send,
 } from 'lucide-react';
 
 interface MySaleItem {
@@ -39,24 +39,6 @@ interface MySale {
   } | null;
 }
 
-interface Product {
-  id: string;
-  code: string;
-  name: string;
-  category: string;
-  brand?: string | null;
-  unitPrice: number;
-}
-
-interface DraftItem {
-  productId: string;
-  productName: string;
-  productCode: string;
-  quantity: number;
-  unitPrice: number;
-  discount: number;
-}
-
 const RevisionBadge = ({ revision, onClick }: { revision: MySale['revision']; onClick: () => void }) => {
   if (!revision) return null;
   const config = {
@@ -86,19 +68,11 @@ export default function MisVentas() {
   const [pages, setPages] = useState(1);
   const [total, setTotal] = useState(0);
 
-  // Modal de revisión
+  // Modal de revisión (solicita sólo el monto correcto y el motivo)
   const [revisionSale, setRevisionSale] = useState<MySale | null>(null);
   const [detailRevision, setDetailRevision] = useState<MySale['revision']>(null);
-  const [draftItems, setDraftItems] = useState<DraftItem[]>([]);
-  const [newClientDni, setNewClientDni] = useState('');
-  const [newClientName, setNewClientName] = useState<string | null>(null);
-  const [clientChecking, setClientChecking] = useState(false);
-  const [clientError, setClientError] = useState('');
-  const [notes, setNotes] = useState('');
+  const [newTotal, setNewTotal] = useState('');
   const [observation, setObservation] = useState('');
-  const [productSearch, setProductSearch] = useState('');
-  const [productResults, setProductResults] = useState<Product[]>([]);
-  const [showProductSearch, setShowProductSearch] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -135,132 +109,30 @@ export default function MisVentas() {
 
   const openRevisionModal = (sale: MySale) => {
     setRevisionSale(sale);
-    setDraftItems(sale.items.map(i => ({
-      productId: i.productId,
-      productName: i.productName,
-      productCode: i.productCode,
-      quantity: i.quantity,
-      unitPrice: i.unitPrice,
-      discount: i.discount,
-    })));
-    setNewClientDni('');
-    setNewClientName(null);
-    setClientError('');
-    setNotes('');
+    setNewTotal(sale.total.toFixed(2));
     setObservation('');
-    setProductSearch('');
-    setProductResults([]);
-    setShowProductSearch(false);
     setSubmitError('');
   };
-
-  const searchProducts = async (term: string) => {
-    setProductSearch(term);
-    if (term.trim().length < 2) {
-      setProductResults([]);
-      return;
-    }
-    try {
-      const res = await api.get<{ products: Product[] }>(`/products?isActive=true&limit=8&search=${encodeURIComponent(term.trim())}`);
-      setProductResults(res.data.products);
-    } catch {
-      setProductResults([]);
-    }
-  };
-
-  const addItem = (product: Product) => {
-    setDraftItems(prev => {
-      const existing = prev.find(i => i.productId === product.id);
-      if (existing) {
-        return prev.map(i => i.productId === product.id ? { ...i, quantity: i.quantity + 1 } : i);
-      }
-      return [...prev, {
-        productId: product.id,
-        productName: product.name,
-        productCode: product.code,
-        quantity: 1,
-        unitPrice: Number(product.unitPrice),
-        discount: 0,
-      }];
-    });
-    setShowProductSearch(false);
-    setProductSearch('');
-    setProductResults([]);
-  };
-
-  const changeQty = (productId: string, delta: number) => {
-    setDraftItems(prev =>
-      prev.map(i => i.productId === productId ? { ...i, quantity: Math.max(1, i.quantity + delta) } : i)
-    );
-  };
-
-  const removeItem = (productId: string) => {
-    setDraftItems(prev => {
-      const next = prev.filter(i => i.productId !== productId);
-      return next;
-    });
-  };
-
-  const checkNewClient = async () => {
-    const dni = newClientDni.trim();
-    setNewClientName(null);
-    setClientError('');
-    if (!dni) return;
-    setClientChecking(true);
-    try {
-      const res = await api.get<{ id: string; firstName: string; lastName: string; dni: string }>(`/clients/dni/${dni}`);
-      const c = res.data;
-      if (c && revisionSale && c.id === revisionSale.client.id) {
-        setClientError('Ese ya es el cliente actual de la venta');
-      } else if (c) {
-        setNewClientName(`${c.firstName} ${c.lastName}`);
-      } else {
-        setClientError('No se encontró un cliente con ese DNI');
-      }
-    } catch (err: any) {
-      setClientError(err?.response?.data?.error || 'No se encontró un cliente con ese DNI');
-    } finally {
-      setClientChecking(false);
-    }
-  };
-
-  const draftSubtotal = draftItems.reduce((s, i) => s + i.unitPrice * i.quantity * (1 - i.discount / 100), 0);
-  const draftTotal = Math.round(draftSubtotal * 1.21 * 100) / 100;
 
   const submitRevision = async () => {
     if (!revisionSale) return;
     setSubmitError('');
-    if (observation.trim().length < 10) {
-      setSubmitError('Escribí el motivo de la revisión (mínimo 10 caracteres)');
+    const monto = Number(newTotal);
+    if (!Number.isFinite(monto) || monto <= 0) {
+      setSubmitError('Indicá el monto correcto de la venta (mayor a 0)');
       return;
     }
-    if (draftItems.length === 0) {
-      setSubmitError('La venta debe tener al menos un producto');
-      return;
-    }
-    if (newClientDni.trim() && !newClientName) {
-      setSubmitError('Verificá el DNI del nuevo cliente antes de enviar');
-      return;
-    }
-    const originalKey = JSON.stringify(revisionSale.items.map(i => [i.productId, i.quantity]));
-    const draftKey = JSON.stringify(draftItems.map(i => [i.productId, i.quantity]));
-    const itemsChanged = originalKey !== draftKey;
-    const clientChanged = !!newClientName && newClientDni.trim() !== revisionSale.client.dni;
-    const notesChanged = notes.trim() !== '';
-    if (!itemsChanged && !clientChanged && !notesChanged) {
-      setSubmitError('No hiciste ningún cambio: editá cantidades, productos, cliente o notas');
+    if (observation.trim().length < 5) {
+      setSubmitError('Escribí el motivo de la revisión');
       return;
     }
 
     setSubmitting(true);
     try {
-      const payload: Record<string, unknown> = { observation: observation.trim() };
-      if (itemsChanged) {
-        payload.items = draftItems.map(i => ({ productId: i.productId, quantity: i.quantity, discount: i.discount || undefined }));
-      }
-      if (clientChanged) payload.newClientDni = newClientDni.trim();
-      if (notesChanged) payload.notes = notes.trim();
-      const res = await api.post<{ message: string }>(`/purchases/${revisionSale.id}/revision`, payload);
+      const res = await api.post<{ message: string }>(`/purchases/${revisionSale.id}/revision`, {
+        newTotal: monto,
+        observation: observation.trim(),
+      });
       setSuccessMsg(res.data.message || 'Solicitud enviada');
       setRevisionSale(null);
       await loadSales();
@@ -281,7 +153,7 @@ export default function MisVentas() {
             Mis Ventas
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Las ventas que registraste con tu usuario. Podés solicitar una corrección de las ventas de hoy.
+            Podés solicitar la corrección de cualquier venta: indicás el monto correcto y el motivo, y el administrador la revisa.
           </p>
         </div>
         <form onSubmit={handleSearch} className="flex gap-2">
@@ -322,7 +194,7 @@ export default function MisVentas() {
         ) : sales.length === 0 ? (
           <div className="p-10 text-center text-gray-400">
             <Receipt className="w-10 h-10 mx-auto mb-3 opacity-40" />
-            {appliedSearch ? `No hay ventas para el DNI ${appliedSearch}` : 'Todavía no registraste ventas'}
+            {appliedSearch ? `No hay ventas para el DNI ${appliedSearch}` : 'No hay ventas registradas'}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -466,120 +338,21 @@ export default function MisVentas() {
             </div>
 
             <div className="p-6 space-y-5">
-              {/* Items editables */}
+              {/* Monto a actualizar */}
               <div>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm font-medium text-gray-700">Productos de la venta</p>
-                  <button
-                    onClick={() => setShowProductSearch(v => !v)}
-                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center gap-1"
-                  >
-                    <Package className="w-3.5 h-3.5" /> Agregar producto
-                  </button>
-                </div>
-
-                {showProductSearch && (
-                  <div className="mb-3">
-                    <input
-                      autoFocus
-                      value={productSearch}
-                      onChange={(e) => searchProducts(e.target.value)}
-                      placeholder="Buscar producto por nombre o código..."
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                    {productResults.length > 0 && (
-                      <div className="mt-1 border border-gray-200 rounded-lg divide-y divide-gray-100 max-h-48 overflow-y-auto">
-                        {productResults.map(p => (
-                          <button
-                            key={p.id}
-                            onClick={() => addItem(p)}
-                            className="w-full text-left px-3 py-2 hover:bg-blue-50 flex items-center justify-between text-sm"
-                          >
-                            <span>
-                              <span className="font-medium text-gray-800">{p.name}</span>
-                              <span className="text-xs text-gray-400 ml-2">{p.code}</span>
-                            </span>
-                            <span className="text-gray-500">{formatCurrency(Number(p.unitPrice))}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                <div className="border border-gray-200 rounded-lg divide-y divide-gray-100">
-                  {draftItems.map(item => (
-                    <div key={item.productId} className="flex items-center gap-3 px-3 py-2.5">
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-gray-800 truncate">{item.productName}</p>
-                        <p className="text-xs text-gray-400">{item.productCode} · {formatCurrency(item.unitPrice)}</p>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => changeQty(item.productId, -1)} className="p-1 rounded border border-gray-200 hover:bg-gray-50">
-                          <Minus className="w-3.5 h-3.5" />
-                        </button>
-                        <span className="w-8 text-center text-sm font-medium">{item.quantity}</span>
-                        <button onClick={() => changeQty(item.productId, 1)} className="p-1 rounded border border-gray-200 hover:bg-gray-50">
-                          <Plus className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      <span className="w-24 text-right text-sm text-gray-700">
-                        {formatCurrency(item.unitPrice * item.quantity * (1 - item.discount / 100))}
-                      </span>
-                      <button
-                        onClick={() => removeItem(item.productId)}
-                        disabled={draftItems.length <= 1}
-                        title={draftItems.length <= 1 ? 'La venta debe tener al menos un producto' : 'Quitar'}
-                        className="p-1.5 rounded text-red-500 hover:bg-red-50 disabled:opacity-30"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex justify-between text-sm mt-2 px-1">
-                  <span className="text-gray-500">Nuevo total estimado (con IVA)</span>
-                  <span className="font-semibold text-gray-900">{formatCurrency(draftTotal)}</span>
-                </div>
-                <p className="text-xs text-gray-400 mt-0.5 px-1">Los puntos se recalculan según las reglas vigentes al aprobarse.</p>
-              </div>
-
-              {/* Cambiar cliente */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1.5">Cambiar cliente (opcional)</p>
-                <div className="flex gap-2">
-                  <input
-                    value={newClientDni}
-                    onChange={(e) => { setNewClientDni(e.target.value.replace(/\D/g, '').slice(0, 8)); setNewClientName(null); setClientError(''); }}
-                    placeholder="DNI del cliente correcto"
-                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={checkNewClient}
-                    disabled={!newClientDni.trim() || clientChecking}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40 flex items-center gap-1.5"
-                  >
-                    {clientChecking ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />} Verificar
-                  </button>
-                </div>
-                {newClientName && (
-                  <p className="text-xs text-green-700 mt-1 flex items-center gap-1">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Cliente encontrado: {newClientName}
-                  </p>
-                )}
-                {clientError && <p className="text-xs text-red-600 mt-1">{clientError}</p>}
-              </div>
-
-              {/* Notas */}
-              <div>
-                <p className="text-sm font-medium text-gray-700 mb-1.5">Notas de la venta (opcional)</p>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  Monto a actualizar (total final con IVA) <span className="text-red-500">*</span>
+                </label>
                 <input
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Ej: pago con transferencia, cliente frecuente..."
+                  value={newTotal}
+                  onChange={(e) => setNewTotal(e.target.value)}
+                  inputMode="decimal"
+                  placeholder="0.00"
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                <p className="text-xs text-gray-400 mt-1">
+                  Los productos se ajustan proporcionalmente y los puntos se recalculan al aprobar. El administrador puede corregir el monto antes de aplicarlo.
+                </p>
               </div>
 
               {/* Observación para el admin */}

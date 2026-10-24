@@ -8,7 +8,7 @@ export const getMyPurchases = async (req: AuthRequest, res: Response, next: Next
   try {
     const { dni, page = 1, limit = 20, startDate, endDate } = req.query;
     const result = await SaleRevisionService.getMySales({
-      userId: req.user!.id,
+      user: req.user!,
       dni: dni as string | undefined,
       page: Number(page),
       limit: Math.min(Number(limit), 100),
@@ -25,11 +25,9 @@ export const requestRevision = async (req: AuthRequest, res: Response, next: Nex
   try {
     if (!req.user) throw new AppError(401, 'No autenticado');
     const { id } = req.params;
-    const { items, newClientDni, notes, observation } = req.body;
+    const { newTotal, observation } = req.body;
     const result = await SaleRevisionService.requestRevision(id, req.user, {
-      items,
-      newClientDni,
-      notes,
+      newTotal,
       observation,
     });
     res.status(201).json({
@@ -85,8 +83,11 @@ export const getMyRevisions = async (req: AuthRequest, res: Response, next: Next
 export const approveRevision = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { id } = req.params;
-    const { note } = req.body;
-    const result = await SaleRevisionService.approveRevision(id, req.user!.id, note);
+    const { note, newTotal } = req.body;
+    const result = await SaleRevisionService.approveRevision(id, req.user!.id, {
+      note,
+      newTotal: typeof newTotal === 'number' ? newTotal : undefined,
+    });
     res.json(result);
   } catch (error) {
     next(error);

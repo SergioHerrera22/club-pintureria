@@ -43,6 +43,8 @@ router.get('/revisions/mine', authenticate, authorize('CAJERA', 'ADMIN', 'VENDED
 const approveRevisionValidation = z.object({
   body: z.object({
     note: z.string().max(1000).optional(),
+    // El administrador puede corregir el monto al aprobar (gana sobre el solicitado)
+    newTotal: z.number().positive('El monto debe ser mayor a 0').optional(),
   }),
 });
 const rejectRevisionValidation = z.object({
@@ -53,20 +55,15 @@ const rejectRevisionValidation = z.object({
 router.post('/revisions/:id/approve', authenticate, authorize('ADMIN'), validate(approveRevisionValidation), saleRevisionController.approveRevision);
 router.post('/revisions/:id/reject', authenticate, authorize('ADMIN'), validate(rejectRevisionValidation), saleRevisionController.rejectRevision);
 
-// El vendedor/cajera solicita la revisión de una venta propia del día
+// La cajera/vendedor (o el admin) solicita la corrección de una venta cualquiera:
+// sólo el monto correcto y el motivo.
 const revisionRequestValidation = z.object({
   body: z.object({
-    items: z.array(z.object({
-      productId: z.string().min(1),
-      quantity: z.number().int().positive(),
-      discount: z.number().min(0).max(100).optional(),
-    })).min(1).optional(),
-    newClientDni: z.string().regex(/^\d{7,8}$/, 'DNI inválido').optional(),
-    notes: z.string().max(500).optional(),
-    observation: z.string().min(10, 'Explicá el motivo de la revisión (mínimo 10 caracteres)').max(1000),
+    newTotal: z.number().positive('El monto debe ser mayor a 0'),
+    observation: z.string().min(5, 'Explicá el motivo de la revisión (mínimo 5 caracteres)').max(1000),
   }),
 });
-router.post('/:id/revision', authenticate, authorize('VENDEDOR', 'CAJERA'), validate(revisionRequestValidation), saleRevisionController.requestRevision);
+router.post('/:id/revision', authenticate, authorize('VENDEDOR', 'CAJERA', 'ADMIN'), validate(revisionRequestValidation), saleRevisionController.requestRevision);
 
 // ===== VENTAS =====
 router.post('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), requireMenuPermission('ventas'), validate(createPurchaseValidation), purchaseController.createPurchase);

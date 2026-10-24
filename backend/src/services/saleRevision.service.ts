@@ -24,33 +24,68 @@ interface RevisionItemInput {
 }
 
 interface RequestRevisionDTO {
-  items?: RevisionItemInput[];
-  newClientDni?: string;
-  notes?: string;
+  /** Nuevo total (con IVA) que la cajera pide para la venta */
+  newTotal: number;
   observation: string;
+}
+
+/**
+ * Escala proporcionalmente los items de una venta para que el total final
+ * (con IVA) sea el monto indicado. Se usa tanto para el preview de la
+ * solicitud como para aplicar la corrección aprobada.
+ */
+function scaleItemsToTotal(
+  items: Array<{ productId: string; productName?: string; productCode?: string; quantity: number; unitPrice: number; discount: number; lineTotal: number }>,
+  newTotal: number
+) {
+  const total = Math.round(newTotal * 100) / 100;
+  const taxableTarget = Math.round((total / 1.21) * 100) / 100;
+  const currentSubtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
+  const factor = currentSubtotal > 0 ? taxableTarget / currentSubtotal : 1;
+  const scaled = items.map(i => ({
+    productId: i.productId,
+    productName: i.productName,
+    productCode: i.productCode,
+    quantity: i.quantity,
+    unitPrice: Math.round(i.unitPrice * factor * 100) / 100,
+    discount: i.discount,
+    lineTotal: Math.round(i.lineTotal * factor * 100) / 100,
+  }));
+  const subtotal = Math.round(scaled.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
+  const discount = Math.round(scaled.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
+  const taxable = Math.round((subtotal - discount) * 100) / 100;
+  const tax = Math.round((total - taxable) * 100) / 100;
+  return { scaled, subtotal, discount, tax, total };
 }
 
 const RECEIPT_NUMBER = (p: { receiptNumber: string }) => p.receiptNumber;
 
 export class SaleRevisionService {
   /**
-   * Ventas realizadas por el usuario autenticado (cajera/vendedor/admin),
-   * con el estado de su última solicitud de revisión.
+   * Ventas visibles para solicitar revisión: la cajera/admin ven todas las
+   * ventas de su alcance; el vendedor sólo las suyas. Con el estado de la
+   * última solicitud de revisión de cada venta.
    */
   static async getMySales(filters: {
-    userId: string;
+    user: NonNullable<import('../middleware/auth').AuthRequest['user']>;
     dni?: string;
     page?: number;
     limit?: number;
     startDate?: Date;
     endDate?: Date;
   }) {
-    const { userId, dni, page = 1, limit = 20, startDate, endDate } = filters;
+    const { user, dni, page = 1, limit = 20, startDate, endDate } = filters;
 
-    const where: Prisma.PurchaseWhereInput = {
-      // Ventas registradas por el usuario O acreditadas a él como vendedor
-      OR: [{ cashierId: userId }, { vendorId: userId }],
-    };
+    const where: Prisma.PurchaseWhereInput = {};
+    // Special: la cajera/admin ven todas las ventas (de cualquier personal) de su
+    // alcance para poder solicitar la revisión de cualquier venta; el vendedor sólo las suyas.
+    const scope = resolveBranchScope(user);
+    if (user.role === 'VENDEDOR') {
+      where.OR = [{ cashierId: user.id }, { vendorId: user.id }];
+    }
+    if (!scope.isGlobal && scope.branchId && scope.branchId !== NO_BRANCH) {
+      where.branchId = scope.branchId;
+    }
     if (dni) where.client = { dni: { contains: dni } };
     if (startDate || endDate) {
       where.createdAt = {};
@@ -78,8 +113,6 @@ export class SaleRevisionService {
       }),
       prisma.purchase.count({ where }),
     ]);
-
-    const startOfToday = startOfTodayArgentina();
 
     return {
       purchases: purchases.map(p => {
@@ -111,7 +144,6 @@ export class SaleRevisionService {
           })),
           canRequestRevision:
             p.status === PurchaseStatus.COMPLETADA &&
-            p.createdAt >= startOfToday &&
             (!lastRevision || lastRevision.status !== SaleRevisionStatus.PENDIENTE),
           revision: lastRevision
             ? {
@@ -138,12 +170,13 @@ export class SaleRevisionService {
   }
 
   /**
-   * El vendedor/cajera solicita una revisión de una venta propia del día.
-   * Calcula un preview del impacto (totales y puntos) para que el admin
-   * sepa qué va a cambiar antes de aprobar.
+   * La cajera/vendedor solicitan la corrección de una venta (de cualquiera):
+   * sólo indican el monto correcto y el motivo. Los productos se escalan
+   * proporcionalmente al nuevo monto y los puntos se recalculan según las
+   * reglas vigentes. El admin puede corregir el monto al aprobar.
    */
   static async requestRevision(purchaseId: string, user: NonNullable<import('../middleware/auth').AuthRequest['user']>, payload: RequestRevisionDTO) {
-    const { items, newClientDni, notes, observation } = payload;
+    const { newTotal, observation } = payload;
 
     const purchase = await prisma.purchase.findUnique({
       where: { id: purchaseId },
@@ -157,16 +190,11 @@ export class SaleRevisionService {
     if (purchase.status !== PurchaseStatus.COMPLETADA) {
       throw new AppError(400, 'La venta no está completada');
     }
-    if (purchase.cashierId !== user.id && purchase.vendorId !== user.id) {
-      throw new AppError(403, 'Sólo podés solicitar revisiones de tus propias ventas');
-    }
-    // Aislamiento por sucursal (por si el admin pide revisión de otra sucursal ajena)
+    // De cualquier venta (de cualquier personal y cualquier fecha):
+    // sólo por alcance de sucursal; el admin ve todas.
     const scope = resolveBranchScope(user);
     if (!scope.isGlobal && scope.branchId !== NO_BRANCH && purchase.branchId !== scope.branchId) {
       throw new AppError(403, 'No tenés acceso a esta venta');
-    }
-    if (purchase.createdAt < startOfTodayArgentina()) {
-      throw new AppError(400, 'Sólo se pueden solicitar revisiones de ventas del día de hoy');
     }
     const pending = await prisma.saleRevision.findFirst({
       where: { purchaseId, status: SaleRevisionStatus.PENDIENTE },
@@ -175,72 +203,27 @@ export class SaleRevisionService {
       throw new AppError(400, 'Ya existe una solicitud de revisión pendiente para esta venta');
     }
 
-    const hasItems = Array.isArray(items) && items.length > 0;
-    const hasNewClient = !!newClientDni;
-    const hasNotes = typeof notes === 'string' && notes.trim().length > 0 && notes.trim() !== (purchase.notes ?? '');
-    if (!hasItems && !hasNewClient && !hasNotes) {
-      throw new AppError(400, 'No hay cambios para solicitar (items, cliente o notas)');
+    if (typeof newTotal !== 'number' || !Number.isFinite(newTotal) || newTotal <= 0) {
+      throw new AppError(400, 'Indicá el monto correcto de la venta (mayor a 0)');
+    }
+    const requestedTotal = Math.round(newTotal * 100) / 100;
+    if (requestedTotal === Math.round(Number(purchase.total) * 100) / 100) {
+      throw new AppError(400, 'El monto indicado es igual al actual de la venta');
     }
 
-    // Resolver nuevo cliente (opcional)
-    let newClient: { id: string; firstName: string; lastName: string; dni: string } | null = null;
-    if (hasNewClient) {
-      const client = await prisma.user.findFirst({
-        where: { dni: newClientDni!, role: 'CLIENTE', isActive: true },
-        select: { id: true, firstName: true, lastName: true, dni: true, branchId: true, clientProfile: { select: { id: true } } },
-      });
-      if (!client || !client.clientProfile) throw new AppError(404, `No existe un cliente activo con DNI ${newClientDni}`);
-      if (client.id === purchase.clientId) throw new AppError(400, 'El cliente indicado ya es el de la venta');
-      if (client.branchId && client.branchId !== purchase.branchId) {
-        throw new AppError(400, 'El cliente pertenece a otra sucursal');
-      }
-      newClient = { id: client.id, firstName: client.firstName, lastName: client.lastName, dni: client.dni };
-    }
-
-    // Resolver items propuestos (si no vienen, se mantienen los originales)
-    let proposedItems: Array<{ productId: string; productName: string; productCode: string; quantity: number; unitPrice: number; discount: number; lineTotal: number }> = [];
-    if (hasItems) {
-      const productIds = items!.map(i => i.productId);
-      const products = await prisma.product.findMany({ where: { id: { in: productIds }, isActive: true } });
-      if (products.length !== new Set(productIds).size) {
-        throw new AppError(400, 'Algunos productos no existen o están inactivos');
-      }
-      const productMap = new Map(products.map(p => [p.id, p]));
-      proposedItems = items!.map(i => {
-        const product = productMap.get(i.productId)!;
-        const unitPrice = Number(product.unitPrice);
-        const discount = i.discount || 0;
-        const lineTotal = unitPrice * i.quantity * (1 - discount / 100);
-        return {
-          productId: product.id,
-          productName: product.name,
-          productCode: product.code,
-          quantity: i.quantity,
-          unitPrice,
-          discount,
-          lineTotal: Math.round(lineTotal * 100) / 100,
-        };
-      });
-    } else {
-      proposedItems = purchase.items.map(i => ({
-        productId: i.productId,
-        productName: i.product.name,
-        productCode: i.product.code,
-        quantity: i.quantity,
-        unitPrice: Number(i.unitPrice),
-        discount: Number(i.discount),
-        lineTotal: Number(i.lineTotal),
-      }));
-    }
-
-    // Preview con la misma matemática que createPurchase
-    const subtotal = proposedItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-    const discount = proposedItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0);
-    const taxable = subtotal - discount;
-    const tax = Math.round(taxable * 0.21 * 100) / 100;
-    const total = Math.round((taxable + tax) * 100) / 100;
-
-    const targetClientId = newClient?.id ?? purchase.clientId;
+    // El monto pedido reemplaza el total final (con IVA): los productos de la
+    // venta se escalan proporcionalmente al nuevo monto.
+    const currentItems = purchase.items.map(i => ({
+      productId: i.productId,
+      productName: i.product.name,
+      productCode: i.product.code,
+      quantity: i.quantity,
+      unitPrice: Number(i.unitPrice),
+      discount: Number(i.discount),
+      lineTotal: Number(i.lineTotal),
+    }));
+    const { scaled, subtotal, discount, tax, total } = scaleItemsToTotal(currentItems, requestedTotal);
+    const proposedItems = scaled;
 
     // Categorías y marcas de los productos propuestos (para las reglas de puntos)
     const productsMeta = await prisma.product.findMany({
@@ -252,7 +235,7 @@ export class SaleRevisionService {
     const brandIds = proposedItems.map(i => metaMap.get(i.productId)?.brand).filter((b): b is string => !!b);
 
     const pointsResult = await PointsService.calculatePointsWithPromotions(
-      targetClientId,
+      purchase.clientId,
       proposedItems.map(i => ({
         productId: i.productId,
         quantity: i.quantity,
@@ -301,10 +284,8 @@ export class SaleRevisionService {
         requestedById: user.id,
         status: SaleRevisionStatus.PENDIENTE,
         changes: {
-          items: hasItems ? items : undefined,
-          newClientId: newClient?.id ?? undefined,
-          newClientName: newClient ? `${newClient.firstName} ${newClient.lastName} (${newClient.dni})` : undefined,
-          notes: hasNotes ? notes?.trim() : undefined,
+          // Sólo el nuevo monto: los productos se escalan al aplicar/aprobar.
+          newTotal: requestedTotal,
         } as Prisma.InputJsonValue,
         originalData: originalData as Prisma.InputJsonValue,
         preview: preview as Prisma.InputJsonValue,
@@ -324,7 +305,7 @@ export class SaleRevisionService {
             userId: a.id,
             type: 'SALE_REVISION_REQUEST',
             title: 'Nueva solicitud de revisión de venta',
-            message: `${user.firstName} ${user.lastName} solicitó revisar la venta ${RECEIPT_NUMBER(purchase)}: ${observation.trim().slice(0, 120)}`,
+            message: `${user.firstName} ${user.lastName} solicitó corregir la venta ${RECEIPT_NUMBER(purchase)}: monto de $${Number(purchase.total)} a $${requestedTotal}. Motivo: ${observation.trim().slice(0, 100)}`,
             metadata: { saleRevisionId: revision.id, purchaseId, receiptNumber: purchase.receiptNumber },
           })),
         });
@@ -471,7 +452,8 @@ export class SaleRevisionService {
    * Aprobación por el administrador: aplica los cambios propuestos,
    * recalcula totales/puntos y ajusta los perfiles de los clientes.
    */
-  static async approveRevision(revisionId: string, adminId: string, note?: string) {
+  static async approveRevision(revisionId: string, adminId: string, opts?: { note?: string; newTotal?: number }) {
+    const note = opts?.note;
     const revision = await prisma.saleRevision.findUnique({ where: { id: revisionId } });
     if (!revision) throw new AppError(404, 'Solicitud no encontrada');
     if (revision.status !== SaleRevisionStatus.PENDIENTE) {
@@ -487,7 +469,7 @@ export class SaleRevisionService {
       throw new AppError(400, 'La venta ya no está completada; no se puede aplicar la revisión');
     }
 
-    const changes = revision.changes as { items?: RevisionItemInput[]; newClientId?: string; notes?: string };
+    const changes = revision.changes as { items?: RevisionItemInput[]; newClientId?: string; notes?: string; newTotal?: number };
 
     // Resolver productos con precios actuales
     let newItems: Array<{ productId: string; quantity: number; unitPrice: number; discount: number; lineTotal: number; category: string; brand: string | null }> = [];
@@ -530,11 +512,43 @@ export class SaleRevisionService {
       });
     }
 
-    const subtotal = newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-    const discount = newItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0);
-    const taxable = subtotal - discount;
-    const tax = Math.round(taxable * 0.21 * 100) / 100;
-    const total = Math.round((taxable + tax) * 100) / 100;
+    // Totales finales. En el flujo nuevo la cajera pide sólo el monto: los
+    // items se escalan proporcionalmente. La admin puede corregir el monto
+    // al aprobar (opts.newTotal gana sobre el monto solicitado).
+    const targetTotal = typeof opts?.newTotal === 'number' ? opts.newTotal : changes.newTotal;
+    let subtotal: number;
+    let discount: number;
+    let tax: number;
+    let total: number;
+    if (Array.isArray(changes.items) && changes.items.length > 0) {
+      // Flujo legado: items propuestos explícitos.
+      subtotal = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
+      discount = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
+      const taxable = subtotal - discount;
+      tax = Math.round(taxable * 0.21 * 100) / 100;
+      total = Math.round((taxable + tax) * 100) / 100;
+    } else if (typeof targetTotal === 'number') {
+      if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
+        throw new AppError(400, 'El monto a aplicar debe ser mayor a 0');
+      }
+      const finalTotal = Math.round(targetTotal * 100) / 100;
+      const scaledTotals = scaleItemsToTotal(newItems.map(({ category: _c, brand: _b, ...rest }) => rest), finalTotal);
+      const scaledByProduct = new Map(scaledTotals.scaled.map(i => [i.productId, i]));
+      newItems = newItems.map(i => {
+        const s = scaledByProduct.get(i.productId);
+        return s ? { ...i, unitPrice: s.unitPrice, lineTotal: s.lineTotal } : i;
+      });
+      subtotal = scaledTotals.subtotal;
+      discount = scaledTotals.discount;
+      tax = scaledTotals.tax;
+      total = scaledTotals.total;
+    } else {
+      subtotal = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
+      discount = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
+      const taxable = subtotal - discount;
+      tax = Math.round(taxable * 0.21 * 100) / 100;
+      total = Math.round((taxable + tax) * 100) / 100;
+    }
 
     const oldClientId = purchase.clientId;
     const newClientId = changes.newClientId ?? oldClientId;
@@ -702,7 +716,7 @@ export class SaleRevisionService {
           userId: revision.requestedById,
           type: 'SALE_REVISION_APPROVED',
           title: 'Revisión aprobada',
-          message: `Tu revisión de la venta ${purchase.receiptNumber} fue aprobada y los cambios ya están aplicados.${note?.trim() ? ` Nota del administrador: ${note.trim()}` : ''}`,
+          message: `Tu revisión de la venta ${purchase.receiptNumber} fue aprobada y los cambios ya están aplicados. Monto final de la venta: $${result.total}.${note?.trim() ? ` Nota del administrador: ${note.trim()}` : ''}`,
           metadata: { saleRevisionId: revision.id, purchaseId: purchase.id },
         },
       });
