@@ -151,6 +151,7 @@ export default function ClientHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [prizesAvailable, setPrizesAvailable] = useState(0);
+  const [prizes, setPrizes] = useState<any[]>([]);
   const [nextGoal, setNextGoal] = useState<NextGoal | null>(null);
 
   useEffect(() => {
