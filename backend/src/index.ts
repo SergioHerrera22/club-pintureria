@@ -69,7 +69,16 @@ if (!frontendDist) {
   console.warn(`⚠️ Frontend no encontrado. Rutas probadas: ${frontendDistCandidates.join(' | ')}`);
 }
 
-const APP_VERSION = 'current-accounts-1';
+// Fotos de productos descargadas del buscador (imageSearch.service)
+app.use(
+  '/uploads',
+  express.static(path.resolve(__dirname, '../uploads'), {
+    maxAge: '30d',
+    fallthrough: false,
+  })
+);
+
+const APP_VERSION = 'product-images-1';
 
 app.get('/health', async (req, res) => {
   let db = 'ok';

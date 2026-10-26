@@ -75,6 +75,7 @@ model Product {
   category         String
   brand            String?
   unitPrice        Decimal           @db.Decimal(10, 2)
+  imageUrl         String?
   isActive         Boolean           @default(true)
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt

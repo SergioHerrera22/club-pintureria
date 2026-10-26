@@ -8,6 +8,8 @@ const router = Router();
 
 router.get('/', authenticate, productController.getProducts);
 router.get('/categories', authenticate, productController.getCategories);
+// Búsqueda de fotos por internet (antes de /:id para que no lo capture)
+router.get('/image-candidates', authenticate, authorize('ADMIN'), productController.getImageCandidates);
 router.get('/:id', authenticate, productController.getProductById);
 
 const createProductSchema = z.object({
@@ -18,6 +20,8 @@ const createProductSchema = z.object({
     category: z.string().min(1),
     brand: z.string().optional(),
     unitPrice: z.number().positive(),
+    // URL de foto: ruta local /uploads/... o URL externa (se descarga al guardar)
+    imageUrl: z.string().max(2000).nullable().optional(),
   }),
 });
 
@@ -31,11 +35,21 @@ const updateProductSchema = z.object({
     brand: z.string().optional(),
     unitPrice: z.number().positive().optional(),
     isActive: z.boolean().optional(),
+    imageUrl: z.string().max(2000).nullable().optional(),
   }),
   params: z.object({ id: z.string() }),
 });
 
 router.put('/:id', authenticate, authorize('ADMIN'), validate(updateProductSchema), productController.updateProduct);
 router.delete('/:id', authenticate, authorize('ADMIN'), productController.deleteProduct);
+
+// Aplicar la foto elegida del buscador (o quitarla con { url: null })
+const setImageSchema = z.object({
+  body: z.object({
+    url: z.string().max(2000).nullable(),
+  }),
+  params: z.object({ id: z.string() }),
+});
+router.post('/:id/image', authenticate, authorize('ADMIN'), validate(setImageSchema), productController.setProductImage);
 
 export default router;

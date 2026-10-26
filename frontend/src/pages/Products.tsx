@@ -26,6 +26,15 @@ interface Product {
   brand?: string;
   unitPrice: number;
   isActive: boolean;
+  imageUrl?: string | null;
+}
+
+interface ImageCandidate {
+  image: string;
+  thumbnail: string;
+  width: number;
+  height: number;
+  title: string;
 }
 
 export default function Products() {
@@ -37,6 +46,12 @@ export default function Products() {
   const [showModal, setShowModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [search, setSearch] = useState('');
+
+  // Foto del producto: búsqueda en internet + elección entre candidatas
+  const [newImageUrl, setNewImageUrl] = useState<string | null>(null);
+  const [imageCandidates, setImageCandidates] = useState<ImageCandidate[]>([]);
+  const [imagesWarning, setImagesWarning] = useState('');
+  const [imagesLoading, setImagesLoading] = useState(false);
   
   const form = useForm<ProductForm>({
     resolver: zodResolver(productSchema),
@@ -73,14 +88,19 @@ export default function Products() {
   const handleSubmit = async (data: ProductForm) => {
     setSaving(true);
     try {
+      // La URL elegida del buscador se descarga y guarda en el servidor al guardar
+      const payload = { ...data, imageUrl: newImageUrl ?? null };
       if (editingProduct) {
-        await api.put(`/products/${editingProduct.id}`, data);
+        await api.put(`/products/${editingProduct.id}`, payload);
       } else {
-        await api.post('/products', data);
+        await api.post('/products', payload);
       }
       setShowModal(false);
       setEditingProduct(null);
       form.reset();
+      setNewImageUrl(null);
+      setImageCandidates([]);
+      setImagesWarning('');
       fetchData();
     } catch {
       // Error saving product
@@ -112,13 +132,58 @@ export default function Products() {
       brand: product.brand || '',
       unitPrice: product.unitPrice,
     });
+    setNewImageUrl(product.imageUrl ?? null);
+    setImageCandidates([]);
+    setImagesWarning('');
     setShowModal(true);
+    // Si el producto todavía no tiene foto, buscar automáticamente al abrir
+    if (!product.imageUrl) {
+      setTimeout(() => { maybeAutoSearchImage(); }, 50);
+    }
   };
-  
+
   const openCreate = () => {
     setEditingProduct(null);
     form.reset({ code: '', name: '', description: '', category: '', brand: '', unitPrice: 0 });
+    setNewImageUrl(null);
+    setImageCandidates([]);
+    setImagesWarning('');
     setShowModal(true);
+  };
+
+  const handleSearchImages = async () => {
+    const values = form.getValues();
+    const name = (values.name || '').trim();
+    const brand = (values.brand || '').trim();
+    const category = (values.category || '').trim();
+    if (name.length < 3 && brand.length < 3) {
+      setImagesWarning('Completá al menos el nombre del producto para buscar su foto');
+      return;
+    }
+    const q = [name, brand, category].filter(Boolean).join(' ');
+    setImagesLoading(true);
+    setImagesWarning('');
+    setImageCandidates([]);
+    try {
+      const res = await api.get<{ candidates: ImageCandidate[]; warning?: string }>(
+        `/products/image-candidates?q=${encodeURIComponent(q)}`
+      );
+      setImageCandidates(res.data.candidates);
+      if (res.data.warning) setImagesWarning(res.data.warning);
+    } catch {
+      setImagesWarning('La búsqueda de internet no está disponible; podés pegar una URL de foto a mano');
+    } finally {
+      setImagesLoading(false);
+    }
+  };
+
+  // Búsqueda automática: al salir del nombre/marca (si no hay foto elegida todavía)
+  const maybeAutoSearchImage = () => {
+    if (newImageUrl || imagesLoading || imageCandidates.length > 0) return;
+    const values = form.getValues();
+    if (((values.name || '').trim().length >= 4 || (values.brand || '').trim().length >= 3)) {
+      handleSearchImages();
+    }
   };
   
   const filteredProducts = products.filter(p =>
@@ -168,6 +233,7 @@ export default function Products() {
             <table className="w-full">
               <thead>
                 <tr className="bg-gray-50 text-left text-sm text-gray-500">
+                  <th className="p-4 font-medium">Foto</th>
                   <th className="p-4 font-medium">Código</th>
                   <th className="p-4 font-medium">Nombre</th>
                   <th className="p-4 font-medium">Categoría</th>
@@ -180,6 +246,19 @@ export default function Products() {
               <tbody className="divide-y divide-gray-200">
                 {filteredProducts.map((product) => (
                   <tr key={product.id} className="hover:bg-gray-50">
+                    <td className="p-4">
+                      {product.imageUrl ? (
+                        <img
+                          src={product.imageUrl}
+                          alt={product.name}
+                          className="w-10 h-10 rounded-lg object-contain bg-white border border-gray-100"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-lg bg-gray-100 flex items-center justify-center">
+                          <Package className="w-5 h-5 text-gray-300" />
+                        </div>
+                      )}
+                    </td>
                     <td className="p-4 font-mono text-sm text-gray-900">{product.code}</td>
                     <td className="p-4">
                       <p className="font-medium text-gray-900">{product.name}</p>
@@ -261,7 +340,7 @@ export default function Products() {
               </div>
               <div>
                 <label className="label">Nombre</label>
-                <input {...form.register('name')} className="input" />
+                <input {...form.register('name')} onBlur={maybeAutoSearchImage} className="input" />
                 {form.formState.errors.name && <p className="text-sm text-red-600 mt-1">{form.formState.errors.name.message}</p>}
               </div>
               <div>
@@ -271,13 +350,81 @@ export default function Products() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="label">Marca</label>
-                  <input {...form.register('brand')} className="input" />
+                  <input {...form.register('brand')} onBlur={maybeAutoSearchImage} className="input" />
                 </div>
                 <div>
                   <label className="label">Precio Unitario</label>
                   <input {...form.register('unitPrice', { valueAsNumber: true })} type="number" step="0.01" min="0.01" className="input" />
                   {form.formState.errors.unitPrice && <p className="text-sm text-red-600 mt-1">{form.formState.errors.unitPrice.message}</p>}
                 </div>
+              </div>
+
+              {/* Foto del producto: se busca en internet al escribir el nombre */}
+              <div>
+                <div className="flex items-center justify-between">
+                  <label className="label">Foto del producto</label>
+                  <button
+                    type="button"
+                    onClick={handleSearchImages}
+                    disabled={imagesLoading}
+                    className="text-xs px-2.5 py-1.5 rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50 flex items-center gap-1.5"
+                  >
+                    {imagesLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
+                    Buscar fotos
+                  </button>
+                </div>
+                {(newImageUrl || imageCandidates.length > 0 || imagesWarning) && (
+                  <div className="mt-2 space-y-2">
+                    {imagesWarning && <p className="text-xs text-amber-600">{imagesWarning}</p>}
+                    {newImageUrl && (
+                      <div className="flex items-center gap-3">
+                        <img
+                          src={newImageUrl}
+                          alt="Foto del producto"
+                          className="w-16 h-16 object-contain border border-gray-200 rounded-lg bg-white"
+                          onError={(e) => { (e.target as HTMLImageElement).style.opacity = '0.3'; }}
+                        />
+                        <p className="text-xs text-gray-500">
+                          {newImageUrl.startsWith('/uploads/')
+                            ? 'Foto guardada en el servidor'
+                            : 'Esta foto se va a descargar al servidor cuando guardes'}
+                        </p>
+                      </div>
+                    )}
+                    {imageCandidates.length > 0 && (
+                      <div>
+                        <p className="text-xs text-gray-400 mb-1">Elegí la foto correcta del producto:</p>
+                        <div className="grid grid-cols-4 gap-2">
+                          {imageCandidates.map(c => (
+                            <button
+                              key={c.image}
+                              type="button"
+                              onClick={() => setNewImageUrl(c.image)}
+                              title={c.title ? `${c.title} (${c.width}×${c.height})` : `${c.width}×${c.height}`}
+                              className={cn(
+                                'h-20 rounded-lg border bg-white flex items-center justify-center overflow-hidden p-1 transition-colors',
+                                newImageUrl === c.image ? 'border-blue-500 ring-2 ring-blue-200' : 'border-gray-200 hover:border-blue-300'
+                              )}
+                            >
+                              <img src={c.thumbnail} alt="" className="max-h-full max-w-full object-contain" />
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setNewImageUrl(null)}
+                      disabled={!newImageUrl}
+                      className="text-xs text-gray-400 hover:text-red-500 disabled:opacity-30"
+                    >
+                      Sin foto
+                    </button>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  Se busca con el nombre, la marca y la categoría. Elegí la foto correcta: la que se ve puede ser de otra variante.
+                </p>
               </div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => { setShowModal(false); setEditingProduct(null); form.reset(); }} className="btn-secondary flex-1">Cancelar</button>
