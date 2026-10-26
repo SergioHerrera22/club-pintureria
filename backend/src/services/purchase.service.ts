@@ -229,18 +229,18 @@ export class PurchaseService {
       const { clientPoints, painterPoints } = splitPoints(finalPoints, hasPainter);
       const painterUser = hasPainter ? currentAccount!.painter : null;
 
-      // 12. Generar número de comprobante
+      // 12. Generar número de comprobante.
+      // Se toma el último número real del día (no se cuenta la cantidad de
+      // filas: si alguna venta se eliminó, el conteo retrocede y colisionaría).
       const today = new Date();
       const dateStr = today.toISOString().slice(0, 10).replace(/-/g, '');
-      const count = await tx.purchase.count({
-        where: {
-          createdAt: {
-            gte: new Date(today.setHours(0, 0, 0, 0)),
-            lt: new Date(today.setHours(23, 59, 59, 999)),
-          },
-        },
+      const lastToday = await tx.purchase.findFirst({
+        where: { receiptNumber: { startsWith: `VTA-${dateStr}-` } },
+        orderBy: { receiptNumber: 'desc' },
+        select: { receiptNumber: true },
       });
-      const receiptNumber = `VTA-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+      const lastSeq = lastToday ? Number(lastToday.receiptNumber.split('-').pop()) : 0;
+      const receiptNumber = `VTA-${dateStr}-${String(lastSeq + 1).padStart(4, '0')}`;
 
       const newBalance = client.clientProfile.currentPoints + clientPoints;
 

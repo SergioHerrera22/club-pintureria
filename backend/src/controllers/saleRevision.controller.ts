@@ -104,3 +104,16 @@ export const rejectRevision = async (req: AuthRequest, res: Response, next: Next
     next(error);
   }
 };
+
+/** Edición directa de una venta por el admin desde el panel de Ventas (monto + motivo) */
+export const adminEditSale = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    if (!req.user) throw new AppError(401, 'No autenticado');
+    const { id } = req.params;
+    const { newTotal, note } = req.body;
+    const result = await SaleRevisionService.adminEditSale(id, req.user, { newTotal, note });
+    res.json(result);
+  } catch (error) {
+    next(error);
+  }
+};

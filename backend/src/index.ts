@@ -78,7 +78,7 @@ app.use(
   })
 );
 
-const APP_VERSION = 'product-images-1';
+const APP_VERSION = 'sales-admin-edit-1';
 
 app.get('/health', async (req, res) => {
   let db = 'ok';

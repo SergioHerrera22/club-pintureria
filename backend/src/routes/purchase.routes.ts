@@ -65,6 +65,17 @@ const revisionRequestValidation = z.object({
 });
 router.post('/:id/revision', authenticate, authorize('VENDEDOR', 'CAJERA', 'ADMIN'), validate(revisionRequestValidation), saleRevisionController.requestRevision);
 
+// Edición directa del administrador desde el panel de Ventas:
+// corrige el monto al instante y queda constancia como revisión aprobada.
+const adminEditSaleValidation = z.object({
+  body: z.object({
+    newTotal: z.number().positive('El monto debe ser mayor a 0'),
+    note: z.string().max(1000).optional(),
+  }),
+  params: z.object({ id: z.string() }),
+});
+router.post('/:id/admin-edit', authenticate, authorize('ADMIN'), validate(adminEditSaleValidation), saleRevisionController.adminEditSale);
+
 // ===== VENTAS =====
 router.post('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), requireMenuPermission('ventas'), validate(createPurchaseValidation), purchaseController.createPurchase);
 router.get('/', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'ventas'), purchaseController.getPurchases);

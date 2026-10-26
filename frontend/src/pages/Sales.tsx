@@ -4,7 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import api from '../lib/api';
 import { cn, formatNumber, formatCurrency, formatDateTime } from '../lib/utils';
-import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X, UserCheck, MessageCircle } from 'lucide-react';
+import { Search, User, Loader2, Award, Package, Plus, Minus, Receipt, Calculator, Trash2, X, UserCheck, MessageCircle, Pencil } from 'lucide-react';
 import { useClientStore } from '../stores/clientStore';
 import { useAuthStore } from '../stores/authStore';
 
@@ -97,6 +97,19 @@ interface SelectedItem {
   quantity: number;
 }
 
+/** Venta reciente del panel (payload de GET /dashboard/recent-purchases) */
+interface RecentSale {
+  id: string;
+  receiptNumber: string;
+  total: number;
+  pointsEarned: number;
+  createdAt: string;
+  client: { name: string; dni: string };
+  branch: { name: string; code: string };
+  itemCount: number;
+  items: Array<{ productName: string; productCode: string; quantity: number }>;
+}
+
 interface SaleWhatsapp {
   phone: string;
   message: string;
@@ -165,7 +178,17 @@ const VendorSelector = ({
   </div>
 );
 
-const RecentSales = ({ recentSales, salesLoading }: { recentSales: Transaction[]; salesLoading: boolean }) => {
+const RecentSales = ({
+  recentSales,
+  salesLoading,
+  isAdmin,
+  onEditSale,
+}: {
+  recentSales: RecentSale[];
+  salesLoading: boolean;
+  isAdmin?: boolean;
+  onEditSale?: (sale: RecentSale) => void;
+}) => {
   if (salesLoading) {
     return (
       <div className="divide-y divide-gray-200">
@@ -200,25 +223,36 @@ const RecentSales = ({ recentSales, salesLoading }: { recentSales: Transaction[]
     <div className="divide-y divide-gray-200">
       {recentSales.map((sale) => (
         <div key={sale.id} className="p-4 hover:bg-gray-50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className={cn('badge', sale.type === 'COMPRA' ? 'badge-success' : 'badge-warning')}>
-                {sale.type === 'COMPRA' ? 'Venta' : sale.type}
-              </span>
-              <div>
-                <p className="font-medium text-gray-900">{formatDateTime(sale.createdAt)}</p>
-                <p className="text-sm text-gray-500">
-                  {sale.type === 'COMPRA' 
-                    ? 'Venta de ' + (sale.items?.length || 0) + ' productos' 
-                    : sale.description || ''}
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="badge badge-success flex-shrink-0">Venta</span>
+              <div className="min-w-0">
+                <p className="font-medium text-gray-900 truncate">
+                  {sale.client.name} <span className="text-gray-400 font-normal">DNI {sale.client.dni}</span>
+                </p>
+                <p className="text-sm text-gray-500 truncate">
+                  {sale.receiptNumber} · {sale.itemCount === 1 ? '1 producto' : `${sale.itemCount} productos`} · {formatDateTime(sale.createdAt)}
+                  {sale.branch?.name ? ` · ${sale.branch.name}` : ''}
                 </p>
               </div>
             </div>
-            <div className="text-right">
-              <p className="font-semibold text-green-600">
-                +{formatNumber(sale.pointsEarned)} pts
-              </p>
-              <p className="text-sm text-gray-500">Total: {formatCurrency(sale.total)}</p>
+            <div className="flex items-center gap-3 flex-shrink-0">
+              <div className="text-right">
+                <p className="font-semibold text-green-600">
+                  +{formatNumber(sale.pointsEarned)} pts
+                </p>
+                <p className="text-sm text-gray-500">Total: {formatCurrency(sale.total)}</p>
+              </div>
+              {isAdmin && onEditSale && (
+                <button
+                  type="button"
+                  onClick={() => onEditSale(sale)}
+                  title="Editar monto de la venta"
+                  className="p-2 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50"
+                >
+                  <Pencil className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -250,11 +284,18 @@ export default function Sales() {
   const [selectedItems, setSelectedItems] = useState<SelectedItem[]>([]);
   const [productSearch, setProductSearch] = useState('');
   const [saleMode, setSaleMode] = useState<'quick' | 'products'>('quick');
-  const [recentSales, setRecentSales] = useState<Transaction[]>([]);
+  const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [clientHistory, setClientHistory] = useState<Transaction[]>([]);
   const [salesLoading, setSalesLoading] = useState(false);
   const [vendors, setVendors] = useState<Array<{ id: string; name: string; dni: string }>>([]);
   const [selectedVendorId, setSelectedVendorId] = useState('');
+
+  // Edición directa del admin (monto + motivo de la venta)
+  const [editingSale, setEditingSale] = useState<RecentSale | null>(null);
+  const [editSaleAmount, setEditSaleAmount] = useState('');
+  const [editSaleNote, setEditSaleNote] = useState('');
+  const [editSaleSaving, setEditSaleSaving] = useState(false);
+  const [editSaleError, setEditSaleError] = useState('');
 
   /** Mensaje de WhatsApp Web preparado al cargar la venta (null = sin teléfono) */
   const [pendingWhatsapp, setPendingWhatsapp] = useState<SaleWhatsapp | null>(null);
@@ -337,11 +378,53 @@ export default function Sales() {
   const fetchRecentSales = async () => {
     setSalesLoading(true);
     try {
-      const response = await api.get<Transaction[]>('/dashboard/recent-purchases?limit=10');
+      const response = await api.get<RecentSale[]>('/dashboard/recent-purchases?limit=10');
       setRecentSales(response.data);
     } catch {
     } finally {
       setSalesLoading(false);
+    }
+  };
+
+  const openEditSale = (sale: RecentSale) => {
+    setEditingSale(sale);
+    setEditSaleAmount(String(sale.total));
+    setEditSaleNote('');
+    setEditSaleError('');
+  };
+
+  const closeEditSale = () => {
+    setEditingSale(null);
+    setEditSaleAmount('');
+    setEditSaleNote('');
+    setEditSaleError('');
+  };
+
+  const submitEditSale = async () => {
+    if (!editingSale) return;
+    const amount = Number(editSaleAmount.replace(',', '.'));
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setEditSaleError('Ingresá el monto correcto (mayor a 0)');
+      return;
+    }
+    if (Math.round(amount * 100) / 100 === Math.round(editingSale.total * 100) / 100) {
+      setEditSaleError('El monto indicado es igual al actual de la venta');
+      return;
+    }
+    setEditSaleSaving(true);
+    setEditSaleError('');
+    try {
+      await api.post(`/purchases/${editingSale.id}/admin-edit`, {
+        newTotal: amount,
+        note: editSaleNote.trim() || undefined,
+      });
+      setSuccess(`Venta ${editingSale.receiptNumber} actualizada a ${formatCurrency(amount)}`);
+      closeEditSale();
+      fetchRecentSales();
+    } catch (err: any) {
+      setEditSaleError(err?.response?.data?.message || 'No se pudo actualizar la venta');
+    } finally {
+      setEditSaleSaving(false);
     }
   };
 
@@ -1294,8 +1377,69 @@ export default function Sales() {
             Últimas Ventas
           </h2>
         </div>
-        <RecentSales recentSales={recentSales} salesLoading={salesLoading} />
+        <RecentSales
+          recentSales={recentSales}
+          salesLoading={salesLoading}
+          isAdmin={user?.role === 'ADMIN'}
+          onEditSale={openEditSale}
+        />
       </div>
+
+      {/* Modal: edición directa del admin (monto + motivo) */}
+      {editingSale && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md">
+            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+              <h3 className="font-semibold text-gray-900">Editar venta {editingSale.receiptNumber}</h3>
+              <button onClick={closeEditSale} className="text-gray-500 hover:text-gray-700">✕</button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-3 text-sm text-gray-600">
+                <p><span className="font-medium">{editingSale.client.name}</span> (DNI {editingSale.client.dni})</p>
+                <p>Monto actual: <span className="font-semibold text-gray-900">{formatCurrency(editingSale.total)}</span></p>
+              </div>
+              <div>
+                <label className="label">Monto correcto</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  value={editSaleAmount}
+                  onChange={(e) => setEditSaleAmount(e.target.value)}
+                  className="input"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="label">Motivo de la corrección</label>
+                <textarea
+                  rows={2}
+                  value={editSaleNote}
+                  onChange={(e) => setEditSaleNote(e.target.value)}
+                  placeholder="Ej: se cobró de más / error de tipeo..."
+                  className="input"
+                />
+              </div>
+              {editSaleError && <p className="text-sm text-red-600">{editSaleError}</p>}
+              <p className="text-xs text-gray-400">
+                Se ajustan proporcionalmente los productos de la venta, los puntos del cliente y del pintor, y queda constancia en el libro. El cliente recibe un aviso del cambio.
+              </p>
+            </div>
+            <div className="p-4 border-t border-gray-200 flex justify-end gap-2">
+              <button type="button" onClick={closeEditSale} className="btn-secondary">Cancelar</button>
+              <button
+                type="button"
+                onClick={submitEditSale}
+                disabled={editSaleSaving}
+                className="btn-primary flex items-center gap-2"
+              >
+                {editSaleSaving && <Loader2 className="w-4 h-4 animate-spin" />}
+                Guardar cambios
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {success && (
         <div className="fixed bottom-4 right-4 z-50 animate-slide-up max-w-md">

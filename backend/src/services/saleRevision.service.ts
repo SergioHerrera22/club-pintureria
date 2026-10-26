@@ -706,19 +706,21 @@ export class SaleRevisionService {
       return { updated, approved, newPoints, total, newBalance };
     }, { timeout: 30000, maxWait: 15000 });
 
-    // 4. Notificar al solicitante
-    try {
-      await prisma.notification.create({
-        data: {
-          userId: revision.requestedById,
-          type: 'SALE_REVISION_APPROVED',
-          title: 'Revisión aprobada',
-          message: `Tu revisión de la venta ${purchase.receiptNumber} fue aprobada y los cambios ya están aplicados. Monto final de la venta: $${result.total}.${note?.trim() ? ` Nota del administrador: ${note.trim()}` : ''}`,
-          metadata: { saleRevisionId: revision.id, purchaseId: purchase.id },
-        },
-      });
-    } catch (err) {
-      console.error('Error notificando aprobación:', err);
+    // 4. Notificar al solicitante (si no es el propio admin editando su edición directa)
+    if (revision.requestedById !== adminId) {
+      try {
+        await prisma.notification.create({
+          data: {
+            userId: revision.requestedById,
+            type: 'SALE_REVISION_APPROVED',
+            title: 'Revisión aprobada',
+            message: `Tu revisión de la venta ${purchase.receiptNumber} fue aprobada y los cambios ya están aplicados. Monto final de la venta: $${result.total}.${note?.trim() ? ` Nota del administrador: ${note.trim()}` : ''}`,
+            metadata: { saleRevisionId: revision.id, purchaseId: purchase.id },
+          },
+        });
+      } catch (err) {
+        console.error('Error notificando aprobación:', err);
+      }
     }
 
     return {
@@ -731,6 +733,97 @@ export class SaleRevisionService {
         newClientBalance: result.newBalance,
       },
     };
+  }
+
+  /**
+   * Edición directa de una venta por el administrador desde el panel de
+   * Ventas: cambia el monto y aplica la misma mecánica que la aprobación de
+   * una revisión (items escalados proporcionalmente, puntos recalculados con
+   * las reglas vigentes, perfiles de cliente/pintor ajustados con libro).
+   * Queda constancia en el libro como revisión aprobada.
+   */
+  static async adminEditSale(
+    purchaseId: string,
+    user: NonNullable<import('../middleware/auth').AuthRequest['user']>,
+    payload: { newTotal: number; note?: string }
+  ) {
+    const { newTotal, note } = payload;
+    if (typeof newTotal !== 'number' || !Number.isFinite(newTotal) || newTotal <= 0) {
+      throw new AppError(400, 'Indicá el monto correcto de la venta (mayor a 0)');
+    }
+
+    const purchase = await prisma.purchase.findUnique({
+      where: { id: purchaseId },
+      include: {
+        items: { include: { product: true } },
+        client: { select: { id: true, firstName: true, lastName: true, dni: true } },
+        branch: { select: { id: true } },
+      },
+    });
+    if (!purchase) throw new AppError(404, 'Venta no encontrada');
+    if (purchase.status !== PurchaseStatus.COMPLETADA) {
+      throw new AppError(400, 'La venta no está completada');
+    }
+    const scope = resolveBranchScope(user);
+    if (!scope.isGlobal && scope.branchId && scope.branchId !== NO_BRANCH && purchase.branchId !== scope.branchId) {
+      throw new AppError(403, 'No tenés acceso a esta venta');
+    }
+
+    const requestedTotal = Math.round(newTotal * 100) / 100;
+    if (requestedTotal === Math.round(Number(purchase.total) * 100) / 100) {
+      throw new AppError(400, 'El monto indicado es igual al actual de la venta');
+    }
+
+    // Constancia: fila de revisión del administrador (se aprueba al aplicar)
+    const revision = await prisma.saleRevision.create({
+      data: {
+        purchaseId,
+        requestedById: user.id,
+        status: SaleRevisionStatus.PENDIENTE,
+        changes: { newTotal: requestedTotal } as Prisma.InputJsonValue,
+        originalData: {
+          clientId: purchase.clientId,
+          clientDni: purchase.client.dni,
+          clientName: `${purchase.client.firstName} ${purchase.client.lastName}`,
+          notes: purchase.notes,
+          items: purchase.items.map(i => ({
+            productId: i.productId,
+            productName: i.product.name,
+            productCode: i.product.code,
+            quantity: i.quantity,
+            unitPrice: Number(i.unitPrice),
+            discount: Number(i.discount),
+            lineTotal: Number(i.lineTotal),
+          })),
+          subtotal: Number(purchase.subtotal),
+          discount: Number(purchase.discount),
+          tax: Number(purchase.tax),
+          total: Number(purchase.total),
+          pointsEarned: purchase.pointsEarned,
+        } as Prisma.InputJsonValue,
+        observation: note?.trim() || 'Edición directa del administrador desde el panel de Ventas',
+      },
+    });
+
+    // Aplica la misma mecánica que la aprobación (sin notificar al admin por sí mismo)
+    const approved = await this.approveRevision(revision.id, user.id, { note });
+
+    // Avisar al cliente que su venta cambió
+    try {
+      await prisma.notification.create({
+        data: {
+          userId: purchase.clientId,
+          type: 'SALE_UPDATED',
+          title: 'Venta actualizada',
+          message: `El monto de tu venta ${RECEIPT_NUMBER(purchase)} fue actualizado de $${Number(purchase.total)} a $${requestedTotal}${note?.trim() ? `. Motivo: ${note.trim().slice(0, 120)}` : ''}.`,
+          metadata: { purchaseId, receiptNumber: purchase.receiptNumber },
+        },
+      });
+    } catch (err) {
+      console.error('Error notificando edición de venta al cliente:', err);
+    }
+
+    return approved;
   }
 
   /** Rechazo por el administrador: queda constancia del motivo */
