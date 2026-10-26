@@ -622,8 +622,8 @@ export default function Sales() {
   };
 
   const getSubtotal = () => selectedItems.reduce((sum, item) => sum + item.product.unitPrice * item.quantity, 0);
-  const getTax = () => getSubtotal() * 0.21;
-  const getTotal = () => getSubtotal() + getTax();
+  // IVA incluido: los precios ya llevan el IVA, el total es la suma directa.
+  const getTotal = () => getSubtotal();
   const getEstimatedPoints = (amount: number) => Math.round(amount * 0.04);
 
   const resetSale = () => {
@@ -734,7 +734,7 @@ export default function Sales() {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="font-medium text-gray-900">Datos de la Venta Rápida</h3>
                   <div>
-                    <label htmlFor="new-client-amount" className="label">Monto Total (con IVA) *</label>
+                    <label htmlFor="new-client-amount" className="label">Monto Total *</label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg font-semibold">$</span>
                       <input
@@ -866,10 +866,6 @@ export default function Sales() {
                         <div className="flex justify-between text-gray-900">
                           <span>Subtotal</span>
                           <span>{formatCurrency(getSubtotal())}</span>
-                        </div>
-                        <div className="flex justify-between text-gray-900">
-                          <span>IVA (21%)</span>
-                          <span>{formatCurrency(getTax())}</span>
                         </div>
                         <div className="flex justify-between text-lg font-bold text-primary-600">
                           <span>Total</span>
@@ -1083,7 +1079,7 @@ export default function Sales() {
           {saleMode === 'quick' && (
             <form onSubmit={quickSaleForm.handleSubmit(handleQuickSale)} className="p-4 space-y-4">
               <div>
-                <label htmlFor="quick-amount" className="label">Monto Total (con IVA)</label>
+                <label htmlFor="quick-amount" className="label">Monto Total</label>
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg font-semibold">$</span>
                   <input
@@ -1238,10 +1234,6 @@ export default function Sales() {
                     <div className="flex justify-between text-gray-900">
                       <span>Subtotal</span>
                       <span>{formatCurrency(getSubtotal())}</span>
-                    </div>
-                    <div className="flex justify-between text-gray-900">
-                      <span>IVA (21%)</span>
-                      <span>{formatCurrency(getTax())}</span>
                     </div>
                     <div className="flex justify-between text-lg font-bold text-primary-600">
                       <span>Total</span>

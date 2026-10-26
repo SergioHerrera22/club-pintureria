@@ -341,7 +341,7 @@ export default function MisVentas() {
               {/* Monto a actualizar */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                  Monto a actualizar (total final con IVA) <span className="text-red-500">*</span>
+                  Monto a actualizar <span className="text-red-500">*</span>
                 </label>
                 <input
                   value={newTotal}

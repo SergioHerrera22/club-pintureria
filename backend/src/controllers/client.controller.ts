@@ -977,14 +977,15 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
     }
     
     // Create or update generic product for quick purchase (atomic upsert)
+    // Monto IVA incluido: el precio del item es directamente el monto.
     const quickProduct = await prisma.product.upsert({
       where: { code: 'QUICK_PURCHASE' },
-      update: { unitPrice: amount / 1.21 },
+      update: { unitPrice: amount },
       create: {
         code: 'QUICK_PURCHASE',
         name: 'Compra Rápida',
         category: 'Varios',
-        unitPrice: amount / 1.21,
+        unitPrice: amount,
         isActive: true,
       },
     });
@@ -997,7 +998,7 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
       items: [{
         productId: quickProduct.id,
         quantity: 1,
-        unitPrice: amount / 1.21,
+        unitPrice: amount,
         discount: 0,
       }],
       notes: notes || 'Compra rápida',

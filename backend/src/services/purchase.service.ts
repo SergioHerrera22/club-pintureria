@@ -188,8 +188,10 @@ export class PurchaseService {
       }
 
       const finalTaxableAmount = taxableAmount - couponDiscount;
-      const finalTax = Math.round(finalTaxableAmount * 0.21 * 100) / 100; // IVA 21%
-      const finalTotal = Math.round((finalTaxableAmount + finalTax) * 100) / 100;
+      // Todos los montos del sistema son IVA incluido: los precios de los
+      // productos ya llevan el IVA, no se agrega nada encima (tax = 0).
+      const finalTax = 0;
+      const finalTotal = Math.round(finalTaxableAmount * 100) / 100;
 
       // 8. Los puntos se calculan sobre el TOTAL pagado por el cliente (IVA incluido, tras descuentos).
       //    "0.04 puntos por $1" = 0.04 por cada peso efectivamente pagado.
@@ -199,7 +201,7 @@ export class PurchaseService {
           productId: i.productId,
           quantity: i.quantity,
           unitPrice: i.unitPrice,
-          lineTotal: Math.round(i.lineTotal * 1.21 * 100) / 100,
+          lineTotal: Math.round(i.lineTotal * 100) / 100,
         })),
         subtotal: finalTotal,
       };

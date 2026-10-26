@@ -24,14 +24,15 @@ interface RevisionItemInput {
 }
 
 interface RequestRevisionDTO {
-  /** Nuevo total (con IVA) que la cajera pide para la venta */
+  /** Nuevo total de la venta (IVA incluido) que la cajera pide */
   newTotal: number;
   observation: string;
 }
 
 /**
  * Escala proporcionalmente los items de una venta para que el total final
- * (con IVA) sea el monto indicado. Se usa tanto para el preview de la
+ * sea el monto indicado. Todos los montos son IVA incluido (los precios ya
+ * lo llevan; no se agrega IVA). Se usa tanto para el preview de la
  * solicitud como para aplicar la corrección aprobada.
  */
 function scaleItemsToTotal(
@@ -39,9 +40,8 @@ function scaleItemsToTotal(
   newTotal: number
 ) {
   const total = Math.round(newTotal * 100) / 100;
-  const taxableTarget = Math.round((total / 1.21) * 100) / 100;
   const currentSubtotal = items.reduce((s, i) => s + i.unitPrice * i.quantity, 0);
-  const factor = currentSubtotal > 0 ? taxableTarget / currentSubtotal : 1;
+  const factor = currentSubtotal > 0 ? total / currentSubtotal : 1;
   const scaled = items.map(i => ({
     productId: i.productId,
     productName: i.productName,
@@ -53,8 +53,7 @@ function scaleItemsToTotal(
   }));
   const subtotal = Math.round(scaled.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
   const discount = Math.round(scaled.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
-  const taxable = Math.round((subtotal - discount) * 100) / 100;
-  const tax = Math.round((total - taxable) * 100) / 100;
+  const tax = 0;
   return { scaled, subtotal, discount, tax, total };
 }
 
@@ -211,8 +210,8 @@ export class SaleRevisionService {
       throw new AppError(400, 'El monto indicado es igual al actual de la venta');
     }
 
-    // El monto pedido reemplaza el total final (con IVA): los productos de la
-    // venta se escalan proporcionalmente al nuevo monto.
+    // El monto pedido reemplaza el total final (IVA incluido): los productos
+    // de la venta se escalan proporcionalmente al nuevo monto.
     const currentItems = purchase.items.map(i => ({
       productId: i.productId,
       productName: i.product.name,
@@ -240,7 +239,7 @@ export class SaleRevisionService {
         productId: i.productId,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
-        lineTotal: Math.round(i.lineTotal * 1.21 * 100) / 100,
+        lineTotal: i.lineTotal,
       })),
       total,
       categoryIds,
@@ -521,12 +520,11 @@ export class SaleRevisionService {
     let tax: number;
     let total: number;
     if (Array.isArray(changes.items) && changes.items.length > 0) {
-      // Flujo legado: items propuestos explícitos.
+      // Flujo legado: items propuestos explícitos. IVA incluido: tax = 0.
       subtotal = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
       discount = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
-      const taxable = subtotal - discount;
-      tax = Math.round(taxable * 0.21 * 100) / 100;
-      total = Math.round((taxable + tax) * 100) / 100;
+      tax = 0;
+      total = Math.round((subtotal - discount) * 100) / 100;
     } else if (typeof targetTotal === 'number') {
       if (!Number.isFinite(targetTotal) || targetTotal <= 0) {
         throw new AppError(400, 'El monto a aplicar debe ser mayor a 0');
@@ -545,9 +543,8 @@ export class SaleRevisionService {
     } else {
       subtotal = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity, 0) * 100) / 100;
       discount = Math.round(newItems.reduce((s, i) => s + i.unitPrice * i.quantity * (i.discount / 100), 0) * 100) / 100;
-      const taxable = subtotal - discount;
-      tax = Math.round(taxable * 0.21 * 100) / 100;
-      total = Math.round((taxable + tax) * 100) / 100;
+      tax = 0;
+      total = Math.round((subtotal - discount) * 100) / 100;
     }
 
     const oldClientId = purchase.clientId;
@@ -560,7 +557,7 @@ export class SaleRevisionService {
         productId: i.productId,
         quantity: i.quantity,
         unitPrice: i.unitPrice,
-        lineTotal: Math.round(i.lineTotal * 1.21 * 100) / 100,
+        lineTotal: Math.round(i.lineTotal * 100) / 100,
       })),
       total,
       newItems.map(i => i.category).filter(Boolean),
