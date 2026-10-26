@@ -35,7 +35,7 @@ interface RequestRevisionDTO {
  * lo llevan; no se agrega IVA). Se usa tanto para el preview de la
  * solicitud como para aplicar la corrección aprobada.
  */
-function scaleItemsToTotal(
+export function scaleItemsToTotal(
   items: Array<{ productId: string; productName?: string; productCode?: string; quantity: number; unitPrice: number; discount: number; lineTotal: number }>,
   newTotal: number
 ) {
