@@ -136,6 +136,13 @@ function Clients() {
     sortBy: 'createdAt',
     sortOrder: 'desc',
   });
+  /** Búsqueda con debounce: cada tecla abría un request; se espera 300ms de pausa. */
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(filters.search), 300);
+    return () => clearTimeout(timer);
+  }, [filters.search]);
 
   const dniForm = useForm<DniForm>({
     resolver: zodResolver(dniSchema),
@@ -176,7 +183,7 @@ function Clients() {
         sortBy: filters.sortBy,
         sortOrder: filters.sortOrder,
       });
-      if (filters.search) params.append('search', filters.search);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (filters.isActive !== '') params.append('isActive', filters.isActive);
       if (filters.expiryStatus) params.append('expiryStatus', filters.expiryStatus);
       if (filters.expiryStatus === 'expiring') params.append('expiryDays', filters.expiryDays);
@@ -191,7 +198,7 @@ function Clients() {
     }
   };
 
-  useEffect(() => { fetchClients(); }, [pagination.page, filters.search, filters.isActive, filters.expiryStatus, filters.expiryDays, filters.sortBy, filters.sortOrder]);
+  useEffect(() => { fetchClients(); }, [pagination.page, debouncedSearch, filters.isActive, filters.expiryStatus, filters.expiryDays, filters.sortBy, filters.sortOrder]);
 
   const handleSearch = async (data: DniForm) => {
     setSearchLoading(true);

@@ -7,6 +7,9 @@ export const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
+  // Falla rápido si el backend/DB no responden: sin timeout un request
+  // puede quedar esperando para siempre y "colgar" la pantalla.
+  timeout: 20000,
 });
 
 let isRefreshing = false;

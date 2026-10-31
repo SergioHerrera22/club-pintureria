@@ -28,6 +28,37 @@ const branchWhere = (scope: { isGlobal: boolean; branchId: string | null }): Pri
     ? {}
     : { OR: [{ branchId: scope.branchId }, { branchId: null }] };
 
+/** DNI de entrada/persistencia sin puntos, guiones ni espacios. */
+const normalizeDni = (dni: string): string => String(dni).replace(/[.\-\s]/g, '');
+
+/**
+ * Búsqueda de cliente por DNI acotada: match exacto (índice único) y, como
+ * tolerancia ante DNIs mal tipeados, un máximo de 10 candidatos por `contains`
+ * resuelto en la DB. Antes caía a un findMany de TODA la tabla de clientes y
+ * se filtraba en memoria, lo que demoraba segundos en bases grandes y
+ * trasladas las filas por red a Supabase.
+ */
+const findClientByDniFast = async (
+  rawDni: string,
+  scope: { isGlobal: boolean; branchId: string | null },
+): Promise<UserWithProfile | null> => {
+  const cleanDni = normalizeDni(rawDni);
+  // Match exacto
+  const exact = await prisma.user.findFirst({
+    where: { dni: cleanDni, role: UserRole.CLIENTE, ...branchWhere(scope) },
+    include: { clientProfile: true },
+  });
+  if (exact) return exact;
+
+  // Tolerancia: candidatos con el DNI digitado adentro (ej. se buscó con ceros de menos)
+  const candidates = await prisma.user.findMany({
+    where: { dni: { contains: cleanDni }, role: UserRole.CLIENTE, ...branchWhere(scope) },
+    include: { clientProfile: true },
+    take: 10,
+  });
+  return candidates.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni) || null;
+};
+
 /**
  * ¿Es la primera compra del cliente? Considera sólo ventas completadas y
  * excluye la recién creada (para el aviso de WhatsApp de la carga).
@@ -502,32 +533,9 @@ export const findClientByDni = async (req: AuthRequest, res: Response, next: Nex
     const { dni } = req.params;
     
     // Clean DNI - remove dots, dashes, spaces
-    const cleanDni = dni.replace(/[.\-\s]/g, '');
-    
     const scope = userBranchFilter(req);
     
-    // Try exact match first
-    let user = await prisma.user.findFirst({
-      where: { dni: cleanDni, role: UserRole.CLIENTE, ...branchWhere(scope) },
-      include: { clientProfile: true },
-    });
-    
-    // If not found, try finding by contains in BOTH directions
-    if (!user) {
-      const users = await prisma.user.findMany({
-        where: {
-          role: UserRole.CLIENTE,
-          ...branchWhere(scope),
-        },
-        include: { clientProfile: true },
-      });
-      
-      // Find best match: compare cleaned versions
-      user = users.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni)
-        || users.find(u => u.dni.replace(/[.\-\s]/g, '').includes(cleanDni))
-        || users.find(u => cleanDni.includes(u.dni.replace(/[.\-\s]/g, '')))
-        || null;
-    }
+    const user = await findClientByDniFast(dni, scope);
     
     if (!user) {
       throw new AppError(404, 'Cliente no encontrado');
@@ -660,32 +668,11 @@ export const registerPurchase = async (req: AuthRequest, res: Response, next: Ne
     }
     
     // Clean DNI - remove dots, dashes, spaces
-    const cleanDni = dni.replace(/[.\-\s]/g, '');
+    const cleanDni = normalizeDni(dni);
     
     const scope = userBranchFilter(req);
     
-    // Try exact match first
-    let user = await prisma.user.findFirst({
-      where: { dni: cleanDni, role: UserRole.CLIENTE, ...branchWhere(scope) },
-      include: { clientProfile: true },
-    });
-    
-    // If not found, try finding by contains
-    if (!user) {
-      const users = await prisma.user.findMany({
-        where: {
-          dni: {
-            contains: cleanDni,
-            mode: 'insensitive',
-          },
-          role: UserRole.CLIENTE,
-          ...branchWhere(scope),
-        },
-        include: { clientProfile: true },
-      });
-      
-      user = users.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni) || users[0] || null;
-    }
+    let user = await findClientByDniFast(dni, scope);
     
     // If still not found, create new client
     let isNewClient = false;
@@ -804,30 +791,9 @@ export const getClientHistory = async (req: AuthRequest, res: Response, next: Ne
     const { dni } = req.params;
     const { page = 1, limit = 20, type } = req.query;
     
-    // Clean DNI - remove dots, dashes, spaces
-    const cleanDni = dni.replace(/[.\-\s]/g, '');
-    
     const scope = userBranchFilter(req);
     
-    // Try exact match first
-    let user = await prisma.user.findFirst({
-      where: { dni: cleanDni, role: UserRole.CLIENTE, ...branchWhere(scope) },
-    });
-    
-    // If not found, try finding by contains in BOTH directions
-    if (!user) {
-      const users = await prisma.user.findMany({
-        where: {
-          role: UserRole.CLIENTE,
-          ...branchWhere(scope),
-        },
-      });
-      
-      user = users.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni)
-        || users.find(u => u.dni.replace(/[.\-\s]/g, '').includes(cleanDni))
-        || users.find(u => cleanDni.includes(u.dni.replace(/[.\-\s]/g, '')))
-        || null;
-    }
+    const user = await findClientByDniFast(dni, scope);
     
     if (!user) throw new AppError(404, 'Cliente no encontrado');
     
@@ -877,32 +843,11 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
   try {
     const { dni, amount, notes, firstName, lastName, email, phone, birthDate } = req.body;
     
-    // Clean DNI - remove dots, dashes, spaces
-    const cleanDni = dni.replace(/[.\-\s]/g, '');
+    const cleanDni = normalizeDni(dni);
     
     const scope = userBranchFilter(req);
     
-    // Try exact match first
-    let user = await prisma.user.findFirst({
-      where: { dni: cleanDni, role: UserRole.CLIENTE, ...branchWhere(scope) },
-      include: { clientProfile: true },
-    });
-    
-    // If not found, try finding by contains in BOTH directions
-    if (!user) {
-      const users = await prisma.user.findMany({
-        where: {
-          role: UserRole.CLIENTE,
-          ...branchWhere(scope),
-        },
-        include: { clientProfile: true },
-      });
-      
-      user = users.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni)
-        || users.find(u => u.dni.replace(/[.\-\s]/g, '').includes(cleanDni))
-        || users.find(u => cleanDni.includes(u.dni.replace(/[.\-\s]/g, '')))
-        || null;
-    }
+    let user = await findClientByDniFast(dni, scope);
     
     // If still not found, create new client
     let isNewClient = false;
@@ -1036,31 +981,13 @@ export const registerQuickPurchase = async (req: AuthRequest, res: Response, nex
 
 export const getClientPoints = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
-    const { dni } = req.params;
+    const dni = req.params.dni;
     
-    // Clean DNI - remove dots, dashes, spaces
-    const cleanDni = dni.replace(/[.\-\s]/g, '');
-    
-    // Try exact match first
-    let user = await prisma.user.findUnique({
-      where: { dni: cleanDni },
+    // Búsqueda acotada en DB (antes traía TODOS los clientes a memoria)
+    const user = await prisma.user.findUnique({
+      where: { dni: normalizeDni(dni) },
       include: { clientProfile: true },
     });
-    
-    // If not found, try finding by contains in BOTH directions
-    if (!user) {
-      const users = await prisma.user.findMany({
-        where: {
-          role: UserRole.CLIENTE,
-        },
-        include: { clientProfile: true },
-      });
-      
-      user = users.find(u => u.dni.replace(/[.\-\s]/g, '') === cleanDni)
-        || users.find(u => u.dni.replace(/[.\-\s]/g, '').includes(cleanDni))
-        || users.find(u => cleanDni.includes(u.dni.replace(/[.\-\s]/g, '')))
-        || null;
-    }
     
     if (!user) throw new AppError(404, 'Cliente no encontrado');
     

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { prisma } from '../config/prisma';
 import { AppError } from '../middleware/errorHandler';
 import { AuthRequest } from '../middleware/auth';
-import { SYSTEM_CONFIG_KEYS, DEFAULT_WHATSAPP_TEMPLATES } from '../services/systemConfig.service';
+import { SYSTEM_CONFIG_KEYS, DEFAULT_WHATSAPP_TEMPLATES, invalidateSystemConfigCache } from '../services/systemConfig.service';
 
 const whatsappTemplatesSchema = z.object({
   points_earned: z.string().optional(),
@@ -76,6 +76,7 @@ export const updateSystemConfig = async (req: AuthRequest, res: Response, next: 
       update: { value: sanitizedValue, description },
       create: { key, value: sanitizedValue, description },
     });
+    invalidateSystemConfigCache(key);
     
     res.json(config);
   } catch (error) {
@@ -87,6 +88,7 @@ export const deleteSystemConfig = async (req: AuthRequest, res: Response, next: 
   try {
     const { key } = req.params;
     await prisma.systemConfig.delete({ where: { key } });
+    invalidateSystemConfigCache(key);
     res.json({ message: 'Configuración eliminada' });
   } catch (error) {
     next(error);
@@ -165,6 +167,7 @@ export const initializeDefaultConfigs = async (req: AuthRequest, res: Response, 
     
     if (missing.length > 0) {
       await prisma.systemConfig.createMany({ data: missing });
+      invalidateSystemConfigCache();
     }
     
     const configs = await prisma.systemConfig.findMany({ orderBy: { key: 'asc' } });

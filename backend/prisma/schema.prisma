@@ -124,6 +124,9 @@ model Transaction {
   @@index([userId])
   @@index([createdAt])
   @@index([type])
+  /// Acelera los groupBy por usuario+tipo (vencimiento de puntos en listClients
+  /// y el proceso de expiración) y las agendas del historial por tipo.
+  @@index([userId, type])
 }
 
 model TransactionItem {

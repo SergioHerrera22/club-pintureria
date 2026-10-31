@@ -69,6 +69,7 @@ class WhatsAppService {
           `https://graph.facebook.com/v18.0/${client.phoneNumberId}/messages`,
           {
             method: 'POST',
+            signal: AbortSignal.timeout(10_000), // no colgar el request si la API no responde
             headers: {
               'Authorization': `Bearer ${client.accessToken}`,
               'Content-Type': 'application/json',

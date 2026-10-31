@@ -142,13 +142,9 @@ export default function Dashboard() {
         const params: any = {};
         if (selectedBranch) params.branchId = selectedBranch;
         
-        // Fetch stats data
+        // Fetch stats data (recent-purchases se pide en el effect de abajo, no acá)
         const statsResponse = await api.get<DashboardStats>('/dashboard/stats', { params });
         setStats(statsResponse.data);
-        
-        // Fetch recent purchases
-        const recentResponse = await api.get<RecentPurchase[]>('/dashboard/recent-purchases', { params: { ...params, limit: 5 } });
-        setRecentPurchases(recentResponse.data);
       } catch (err: any) {
         setError(err.response?.data?.error || 'Error al cargar datos');
       } finally {
@@ -174,7 +170,7 @@ export default function Dashboard() {
     };
     
     fetchRecent();
-  }, [selectedBranch]);
+  }, [selectedBranch, refreshKey]);
 
   useEffect(() => {
     const fetchBranchSales = async () => {

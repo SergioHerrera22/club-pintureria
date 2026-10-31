@@ -88,28 +88,40 @@ export class PurchaseService {
     const txResult = await prisma.$transaction(async (tx) => {
       // Pintor acreditado en la venta (si el cliente tiene cuenta corriente con pintor)
       let painterCredit: { user: { id: string; firstName: string; lastName: string; dni: string; phone: string | null }; balance: number } | null = null;
-      // 1. Validar cliente
-      const client = await tx.user.findUnique({
-        where: { id: data.clientId },
-        include: { clientProfile: true },
-      });
+      // 1-4. Validar cliente, sucursal, cajero, vendedor y productos en paralelo:
+      // son lecturas independientes y cada una cuesta un roundtrip a la DB.
+      const productIds = data.items.map(i => i.productId);
+      const [client, branch, cashier, vendorUser, products] = await Promise.all([
+        // 1. Validar cliente
+        tx.user.findUnique({
+          where: { id: data.clientId },
+          include: { clientProfile: true },
+        }),
+        // 2. Validar sucursal
+        tx.branch.findUnique({ where: { id: data.branchId } }),
+        // 3. Validar cajero
+        tx.user.findUnique({ where: { id: data.cashierId } }),
+        // 3b. Validar vendedor acreditado (opcional)
+        data.vendorId
+          ? tx.user.findUnique({ where: { id: data.vendorId } })
+          : Promise.resolve(null),
+        // 4. Validar productos y stock
+        tx.product.findMany({
+          where: { id: { in: productIds }, isActive: true },
+        }),
+      ]);
+
       if (!client) throw new AppError(404, 'Cliente no encontrado');
       if (!client.clientProfile) throw new AppError(400, 'Perfil de cliente no encontrado');
       if (!client.isActive) throw new AppError(403, 'Cliente inactivo');
 
-      // 2. Validar sucursal
-      const branch = await tx.branch.findUnique({ where: { id: data.branchId } });
       if (!branch) throw new AppError(404, 'Sucursal no encontrada');
       if (!branch.isActive) throw new AppError(400, 'Sucursal inactiva');
 
-      // 3. Validar cajero
-      const cashier = await tx.user.findUnique({ where: { id: data.cashierId } });
       if (!cashier) throw new AppError(404, 'Cajero no encontrado');
 
-      // 3b. Validar vendedor acreditado (opcional)
       let vendor: { id: string; firstName: string; lastName: string } | null = null;
       if (data.vendorId) {
-        const vendorUser = await tx.user.findUnique({ where: { id: data.vendorId } });
         if (!vendorUser || !vendorUser.isActive) throw new AppError(400, 'El vendedor indicado no existe o está inactivo');
         if (vendorUser.role !== 'VENDEDOR') throw new AppError(400, 'El usuario indicado no es vendedor');
         if (vendorUser.branchId && vendorUser.branchId !== branch.id) {
@@ -118,11 +130,6 @@ export class PurchaseService {
         vendor = { id: vendorUser.id, firstName: vendorUser.firstName, lastName: vendorUser.lastName };
       }
 
-      // 4. Validar productos y stock
-      const productIds = data.items.map(i => i.productId);
-      const products = await tx.product.findMany({
-        where: { id: { in: productIds }, isActive: true },
-      });
       if (products.length !== productIds.length) {
         throw new AppError(400, 'Algunos productos no existen o están inactivos');
       }
@@ -263,7 +270,7 @@ export class PurchaseService {
           currentAccountId: hasPainter ? currentAccount!.id : null,
           pointsBalance: newBalance,
           promotionIds: pointsResult.appliedPromotions.map(p => p.promotion.id),
-          couponId: data.couponCode ? (await tx.coupon.findUnique({ where: { code: data.couponCode } }))?.id : null,
+          couponId: data.couponCode ? (appliedCoupon?.id ?? null) : null,
           status: PurchaseStatus.COMPLETADA,
           notes: data.notes,
           items: {
@@ -358,13 +365,9 @@ export class PurchaseService {
         });
       }
 
-      // Reload client with profile for response
-      const clientWithProfile = await tx.user.findUnique({
-        where: { id: client.id },
-        include: { clientProfile: true },
-      });
-
-      return { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon, clientPoints, painterPoints, painterCredit };
+      // No hace falta re-leer el cliente: la respuesta usa los datos que ya
+      // teníamos (el saldo actualizado viaja en purchase.pointsBalance).
+      return { purchase, clientWithProfile: client, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon, clientPoints, painterPoints, painterCredit };
     }, { timeout: 30000, maxWait: 15000 });
 
     const { purchase, clientWithProfile, branch, cashier, client, finalPoints, newBalance, purchaseItems, finalTotal, pointsResult, appliedCoupon, clientPoints, painterPoints, painterCredit } = txResult;
@@ -376,33 +379,36 @@ export class PurchaseService {
       console.error('Error actualizando desafíos:', err);
     }
 
-    // 16. Enviar notificaciones (fuera de la transacción: nunca fallan ni revierten la venta)
-    try {
-      const [emailEnabled, whatsappEnabled] = await Promise.all([
-        SystemConfigService.getNotificationsEnabled('email'),
-        SystemConfigService.getNotificationsEnabled('whatsapp'),
-      ]);
-      if (clientPoints > 0 && emailEnabled && client.email) {
-        await emailService.sendPointsEarnedEmail(client.email, client.firstName, clientPoints, newBalance);
+    // 16. Enviar notificaciones en segundo plano: nunca bloquean ni revierten
+    // la venta. El cashier recibe la respuesta apenas la DB terminó su trabajo.
+    void (async () => {
+      try {
+        const [emailEnabled, whatsappEnabled] = await Promise.all([
+          SystemConfigService.getNotificationsEnabled('email'),
+          SystemConfigService.getNotificationsEnabled('whatsapp'),
+        ]);
+        if (clientPoints > 0 && emailEnabled && client.email) {
+          await emailService.sendPointsEarnedEmail(client.email, client.firstName, clientPoints, newBalance);
+        }
+        if (clientPoints > 0 && whatsappEnabled && client.phone) {
+          await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, clientPoints, newBalance, {
+            amount: finalTotal,
+            receiptNumber: purchase.receiptNumber,
+            branchName: branch?.name ?? null,
+          });
+        }
+        // Aviso por WhatsApp al pintor si el canal está habilitado y tiene teléfono cargado
+        if (painterCredit && painterPoints > 0 && whatsappEnabled && painterCredit.user.phone) {
+          await whatsappService.sendPointsEarnedNotification(painterCredit.user.phone, painterCredit.user.firstName, painterPoints, painterCredit.balance, {
+            amount: finalTotal,
+            receiptNumber: purchase.receiptNumber,
+            branchName: branch?.name ?? null,
+          });
+        }
+      } catch (err) {
+        console.error('Error enviando notificaciones:', err);
       }
-      if (clientPoints > 0 && whatsappEnabled && client.phone) {
-        await whatsappService.sendPointsEarnedNotification(client.phone, client.firstName, clientPoints, newBalance, {
-          amount: finalTotal,
-          receiptNumber: purchase.receiptNumber,
-          branchName: branch?.name ?? null,
-        });
-      }
-      // Aviso por WhatsApp al pintor si el canal está habilitado y tiene teléfono cargado
-      if (painterCredit && painterPoints > 0 && whatsappEnabled && painterCredit.user.phone) {
-        await whatsappService.sendPointsEarnedNotification(painterCredit.user.phone, painterCredit.user.firstName, painterPoints, painterCredit.balance, {
-          amount: finalTotal,
-          receiptNumber: purchase.receiptNumber,
-          branchName: branch?.name ?? null,
-        });
-      }
-    } catch (err) {
-      console.error('Error enviando notificaciones:', err);
-    }
+    })();
 
     // 18. Construir respuesta
     return this.formatPurchaseResponse(purchase, clientWithProfile as any, branch, cashier, pointsResult, appliedCoupon, {

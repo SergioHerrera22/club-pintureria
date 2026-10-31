@@ -99,11 +99,31 @@ const SUPERSEDED_WHATSAPP_TEMPLATES: Array<Record<string, string>> = [
 
 export const DEFAULT_WHATSAPP_CAMPAIGN_MESSAGE = DEFAULT_WHATSAPP_TEMPLATES.campaign_default;
 
+/**
+ * Cache en memoria de la configuración: las claves se usan en cada venta y en
+ * cada listado (flags de notificaciones, mínimos, días de vencimiento, etc.),
+ * y cada lectura es un roundtrip a la DB remota. TTL corto + invalidación al
+ * guardar desde el panel mantiene los datos frescos sin pagar la latencia.
+ */
+const CONFIG_CACHE_TTL_MS = 30_000;
+const configCache = new Map<string, { value: unknown; expiresAt: number }>();
+
+export const invalidateSystemConfigCache = (key?: string): void => {
+  if (key) configCache.delete(key);
+  else configCache.clear();
+};
+
 export class SystemConfigService {
   static async get<T>(key: string, fallback: T): Promise<T> {
+    const cached = configCache.get(key);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.value as T;
+    }
     try {
       const config = await prisma.systemConfig.findUnique({ where: { key } });
-      return (config?.value as T) ?? fallback;
+      const value = (config?.value as T) ?? fallback;
+      configCache.set(key, { value, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS });
+      return value;
     } catch {
       return fallback;
     }

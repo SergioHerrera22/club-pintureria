@@ -10,6 +10,9 @@ class EmailService {
         host: config.email.host,
         port: config.email.port,
         secure: config.email.secure,
+        connectionTimeout: 10_000, // conectar al SMTP
+        greetingTimeout: 10_000,    // banner inicial del servidor
+        socketTimeout: 15_000,      // inactividad del socket
         auth: {
           user: config.email.user,
           pass: config.email.pass,

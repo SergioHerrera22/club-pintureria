@@ -175,17 +175,36 @@ export const getPointsReport = async (req: AuthRequest, res: Response, next: Nex
       if (to) purchaseWhere.createdAt.lte = new Date(to as string);
     }
     
-    const [earned, redeemed, adjusted] = await Promise.all([
-      prisma.purchase.aggregate({ where: { ...purchaseWhere, status: 'COMPLETADA' }, _sum: { pointsEarned: true } }),
-      prisma.purchase.aggregate({ where: { ...purchaseWhere, status: 'COMPLETADA' }, _sum: { pointsEarned: true } }),
-      prisma.purchase.aggregate({ where: { ...purchaseWhere, status: 'COMPLETADA' }, _sum: { pointsEarned: true } }),
+    // earned: puntos de compras; redeemed: canjes (transacciones CANJE, negativas);
+    // adjusted: ajustes manuales. Los tres venían calculados con la misma
+    // query (3 agregadas idénticas sobre purchase), lo que triplicaba el costo
+    // y devolvía el mismo número repetido en los tres Campos.
+    const transactionBase: Prisma.TransactionWhereInput = {};
+    if (!scope.isGlobal) {
+      if (branchId) transactionBase.user = { branchId };
+    }
+    
+    const [earned, redeemedAgg, adjusted] = await Promise.all([
+      prisma.purchase.aggregate({ where: purchaseWhere, _sum: { pointsEarned: true } }),
+      prisma.transaction.aggregate({
+        where: { ...transactionBase, type: 'CANJE' },
+        _sum: { pointsEarned: true },
+      }),
+      prisma.transaction.aggregate({
+        where: { ...transactionBase, type: 'AJUSTE_MANUAL' },
+        _sum: { pointsEarned: true },
+      }),
     ]);
     
+    const earnedPoints = earned._sum.pointsEarned || 0;
+    const redeemedPoints = Math.abs(redeemedAgg._sum.pointsEarned || 0);
+    const adjustedPoints = adjusted._sum.pointsEarned || 0;
+    
     res.json({
-      earned: earned._sum.pointsEarned || 0,
-      redeemed: Math.abs(redeemed._sum.pointsEarned || 0),
-      adjusted: adjusted._sum.pointsEarned || 0,
-      net: (earned._sum.pointsEarned || 0) + (redeemed._sum.pointsEarned || 0) + (adjusted._sum.pointsEarned || 0),
+      earned: earnedPoints,
+      redeemed: redeemedPoints,
+      adjusted: adjustedPoints,
+      net: earnedPoints - redeemedPoints + adjustedPoints,
     });
   } catch (error) {
     next(error);

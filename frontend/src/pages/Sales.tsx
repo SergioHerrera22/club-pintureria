@@ -265,10 +265,7 @@ export default function Sales() {
   const { 
     currentClient, 
     lastSync,
-    fetchClientByDni, 
-    refreshClientPoints,
-    startAutoSync,
-    stopAutoSync,
+    fetchClientByDni,
     clearClient,
     setCurrentClient,
   } = useClientStore();
@@ -459,15 +456,9 @@ export default function Sales() {
     fetchRecentSales();
   }, []);
 
-  // Auto-sync client points every 5 seconds
-  useEffect(() => {
-    if (client?.dni) {
-      startAutoSync(5000);
-    } else {
-      stopAutoSync();
-    }
-    return () => stopAutoSync();
-  }, [client?.dni, startAutoSync, stopAutoSync]);
+  // El auto-sync cada 5 segundos se eliminó: golpeaba el endpoint
+  // /clients/dni/:dni constantemente. El saldo ya vuelve en la respuesta
+  // de la venta y los refetch se hacen bajo demanda.
 
   useEffect(() => {
     if (productSearch.trim()) {
@@ -606,8 +597,7 @@ export default function Sales() {
       setShowNewClientForm(false);
       setPendingDni('');
       setClient(null);
-      // Refresh client points and recent sales after sale
-      await refreshClientPoints();
+      // Refrescar ventas recientes después de la venta
       fetchRecentSales();
     } catch (err: any) {
       console.error('Error creating client and sale:', err.response?.data || err);
@@ -637,7 +627,6 @@ export default function Sales() {
       finishSale(response.data, `¡Venta registrada! Se otorgaron ${response.data.transaction?.pointsEarned || 0} puntos.`);
       setClient(null);
       quickSaleForm.reset({ amount: undefined as unknown as number, notes: '' });
-      await refreshClientPoints();
       fetchRecentSales();
     } catch (err: any) {
       console.error('Quick sale error:', err.response?.data || err);
@@ -673,7 +662,6 @@ export default function Sales() {
       setSelectedItems([]);
       setClient(null);
       productSaleForm.reset({ notes: '' });
-      await refreshClientPoints();
       fetchRecentSales();
     } catch (err: any) {
       console.error('Product sale error:', err.response?.data || err);
