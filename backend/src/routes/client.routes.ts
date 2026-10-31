@@ -28,7 +28,7 @@ router.get('/dni/:dni', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), 
 router.get('/dni/:dni/points', clientController.getClientPoints);
 router.get('/dni/:dni/history', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), clientController.getClientHistory);
 
-router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN', 'VENDEDOR'), requireMenuPermission('clientes'), validate(z.object({
+router.put('/:id', authenticate, authorize('CAJERA', 'ADMIN'), requireMenuPermission('clientes'), validate(z.object({
   body: z.object({
     firstName: z.string().min(1).optional(),
     lastName: z.string().min(1).optional(),

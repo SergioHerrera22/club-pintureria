@@ -112,6 +112,9 @@ interface ClientDetail extends ClientData {
 function Clients() {
   const { user } = useAuthStore();
   const canDelete = user?.role === 'ADMIN';
+  // La edición de datos del cliente queda reservada a cajeras y admin
+  // (el backend ya filtra la ruta PUT a esos roles).
+  const canEdit = user?.role === 'CAJERA' || user?.role === 'ADMIN';
   const [clients, setClients] = useState<ClientData[]>([]);
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, pages: 0 });
   const [loading, setLoading] = useState(false);
@@ -470,13 +473,15 @@ function Clients() {
                             >
                               <Eye className="w-4 h-4" />
                             </button>
-                            <button
-                              onClick={() => openEditClient(client)}
-                              className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                              title="Editar"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
+                            {canEdit && (
+                              <button
+                                onClick={() => openEditClient(client)}
+                                className="p-2 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                                title="Editar"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
                             {canDelete && (
                               <button
                                 onClick={() => handleDeleteClient(client.id)}
