@@ -84,5 +84,6 @@ router.post('/redeem/client', (0, validation_1.validate)(zod_1.z.object({
     }),
 })), prizeController.redeemPrizeByClient);
 router.get('/redemptions/history', auth_1.authenticate, (0, auth_1.authorize)('ADMIN'), prizeController.getRedemptions);
+router.post('/redemptions/:id/complete', auth_1.authenticate, (0, auth_1.authorizeWithPermission)(['CAJERA', 'ADMIN'], 'premios'), (0, auth_1.requireMenuPermission)('premios'), prizeController.completeRedemption);
 exports.default = router;
 //# sourceMappingURL=prize.routes.js.map

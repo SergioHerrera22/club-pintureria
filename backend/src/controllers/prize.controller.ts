@@ -206,8 +206,8 @@ export const completeRedemption = async (req: AuthRequest, res: Response, next: 
     if (!redemption) throw new AppError(404, 'Redención no encontrada');
     
     // Verificar que el usuario tenga permiso (cajera o admin de su sucursal)
-    const scope = resolveBranchScope(req.user);
-    if (scope.isGlobal || req.user.role === 'CAJERA') {
+    const scope = resolveBranchScope(req.user!);
+    if (scope.isGlobal || req.user!.role === 'CAJERA') {
       // Cajera puede completar cualquier redención de su sucursal
     } else {
       throw new AppError(403, 'No tiene permiso para completar esta redención');

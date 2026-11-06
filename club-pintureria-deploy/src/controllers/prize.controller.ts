@@ -226,6 +226,35 @@ export const getRedemptions = async (req: AuthRequest, res: Response, next: Next
   }
 };
 
+export const completeRedemption = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { redemptionId } = req.params;
+    
+    const redemption = await prisma.redemption.findUnique({ where: { id: redemptionId } });
+    if (!redemption) throw new AppError(404, 'Redención no encontrada');
+    
+    // Verificar que el usuario tenga permiso (cajera o admin de su sucursal)
+    const scope = resolveBranchScope(req.user!);
+    if (scope.isGlobal || req.user!.role === 'CAJERA') {
+      // Cajera puede completar cualquier redención de su sucursal
+    } else {
+      throw new AppError(403, 'No tiene permiso para completar esta redención');
+    }
+    
+    const updatedRedemption = await prisma.redemption.update({
+      where: { id: redemptionId },
+      data: { status: 'COMPLETADO', processedBy: req.user!.id, processedAt: new Date() },
+    });
+    
+    res.json({
+      redemption: { id: updatedRedemption.id, status: updatedRedemption.status, processedAt: updatedRedemption.processedAt },
+      message: 'Canje completado exitosamente',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const getAvailablePrizes = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
   try {
     const { dni } = req.params;

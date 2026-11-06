@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.redeemPrizeByClient = exports.getAvailablePrizes = exports.getRedemptions = exports.redeemPrize = exports.deletePrize = exports.updatePrize = exports.createPrize = exports.getPrizeById = exports.getPrizes = void 0;
+exports.redeemPrizeByClient = exports.getAvailablePrizes = exports.completeRedemption = exports.getRedemptions = exports.redeemPrize = exports.deletePrize = exports.updatePrize = exports.createPrize = exports.getPrizeById = exports.getPrizes = void 0;
 const prisma_1 = require("../config/prisma");
 const points_service_1 = require("../services/points.service");
 const email_service_1 = require("../services/email.service");
@@ -232,6 +232,34 @@ const getRedemptions = async (req, res, next) => {
     }
 };
 exports.getRedemptions = getRedemptions;
+const completeRedemption = async (req, res, next) => {
+    try {
+        const { redemptionId } = req.params;
+        const redemption = await prisma_1.prisma.redemption.findUnique({ where: { id: redemptionId } });
+        if (!redemption)
+            throw new errorHandler_1.AppError(404, 'Redención no encontrada');
+        // Verificar que el usuario tenga permiso (cajera o admin de su sucursal)
+        const scope = (0, auth_1.resolveBranchScope)(req.user);
+        if (scope.isGlobal || req.user.role === 'CAJERA') {
+            // Cajera puede completar cualquier redención de su sucursal
+        }
+        else {
+            throw new errorHandler_1.AppError(403, 'No tiene permiso para completar esta redención');
+        }
+        const updatedRedemption = await prisma_1.prisma.redemption.update({
+            where: { id: redemptionId },
+            data: { status: 'COMPLETADO', processedBy: req.user.id, processedAt: new Date() },
+        });
+        res.json({
+            redemption: { id: updatedRedemption.id, status: updatedRedemption.status, processedAt: updatedRedemption.processedAt },
+            message: 'Canje completado exitosamente',
+        });
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.completeRedemption = completeRedemption;
 const getAvailablePrizes = async (req, res, next) => {
     try {
         const { dni } = req.params;

@@ -7,6 +7,7 @@ export declare const updatePrize: (req: AuthRequest, res: Response, next: NextFu
 export declare const deletePrize: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
 export declare const redeemPrize: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
 export declare const getRedemptions: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
+export declare const completeRedemption: (req: AuthRequest, res: Response, next: NextFunction) => Promise<void>;
 export declare const getAvailablePrizes: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 export declare const redeemPrizeByClient: (req: Request, res: Response, next: NextFunction) => Promise<void>;
 //# sourceMappingURL=prize.controller.d.ts.map
