@@ -175,6 +175,7 @@ export default function Prizes() {
         prizeName: res.data.prize.name,
         pointsSpent,
         newBalance,
+        message: res.data.message,
       });
       
       setClientInfo({ ...clientInfo, currentPoints: newBalance });
@@ -586,10 +587,13 @@ export default function Prizes() {
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <CheckCircle className="w-8 h-8 text-green-600" />
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">¡Canje realizado!</h3>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">{redeemSuccess.message || '¡Canje realizado!'}</h3>
             <p className="text-gray-600 mb-1">Has canjeado <strong>{redeemSuccess.prizeName}</strong></p>
             <p className="text-gray-500 mb-4">Se descontaron {formatNumber(redeemSuccess.pointsSpent)} puntos</p>
             <p className="text-sm text-gray-500 mb-6">Nuevo saldo: <strong className="text-primary-600">{formatNumber(redeemSuccess.newBalance)} pts</strong></p>
+            {redeemSuccess.message && (
+              <p className="text-sm text-gray-400 mb-4">{redeemSuccess.message}</p>
+            )}
             <button onClick={closeSuccessModal} className="btn-primary w-full">Continuar</button>
           </div>
         </div>

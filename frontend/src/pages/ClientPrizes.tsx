@@ -75,7 +75,10 @@ export default function ClientPrizes() {
     setRedeemResult(null);
     try {
       const response = await api.post('/client/prizes/redeem', { prizeId: selected.id });
-      setRedeemResult({ ok: true, message: response.data.message || '¡Canje realizado!' });
+      setRedeemResult({ 
+        ok: true, 
+        message: response.data.message || 'Pedido de canje registrado. Coordiná la retirada del premio en sucursal.' 
+      });
       await fetchPrizes();
     } catch (err: any) {
       setRedeemResult({ ok: false, message: err.response?.data?.error || 'Error al canjear' });
@@ -262,7 +265,19 @@ export default function ClientPrizes() {
 
               {redeemResult && (
                 <div className={cn('p-3 rounded-lg text-sm flex items-start gap-2', redeemResult.ok ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700')}>
-                  {redeemResult.ok ? <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" /> : <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />}
+                  {redeemResult.ok ? (
+                    <div className="flex items-start gap-2">
+                      <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
+                      <span>
+                        {redeemResult.message}
+                        {redeemResult.status && (
+                          <span className="ml-2 text-sm text-gray-400">({redeemResult.status})</span>
+                        )}
+                      </span>
+                    </div>
+                  ) : (
+                    <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+                  )}
                   {redeemResult.message}
                 </div>
               )}

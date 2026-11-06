@@ -58,4 +58,6 @@ router.post('/redeem/client', validate(z.object({
 
 router.get('/redemptions/history', authenticate, authorize('ADMIN'), prizeController.getRedemptions);
 
+router.post('/redemptions/:id/complete', authenticate, authorizeWithPermission(['CAJERA', 'ADMIN'], 'premios'), requireMenuPermission('premios'), prizeController.completeRedemption);
+
 export default router;

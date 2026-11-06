@@ -291,7 +291,8 @@ export class PointsService {
   static async redeemPoints(
     userId: string,
     points: number,
-    redemptionId: string
+    redemptionId: string,
+    options: { skipNotification?: boolean } = {}
   ): Promise<void> {
     await prisma.$transaction(async (tx) => {
       const profile = await tx.clientProfile.findUnique({
@@ -310,15 +311,17 @@ export class PointsService {
         },
       });
 
-      await tx.notification.create({
-        data: {
-          userId,
-          type: 'POINTS_REDEEMED',
-          title: 'Canje realizado',
-          message: `Has canjeado ${points} puntos`,
-          metadata: { points, redemptionId },
-        },
-      });
+      if (!options.skipNotification) {
+        await tx.notification.create({
+          data: {
+            userId,
+            type: 'POINTS_REDEEMED',
+            title: 'Canje realizado',
+            message: `Has canjeado ${points} puntos`,
+            metadata: { points, redemptionId },
+          },
+        });
+      }
     });
   }
 

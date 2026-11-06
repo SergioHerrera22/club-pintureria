@@ -171,21 +171,56 @@ export const redeemPrize = async (req: AuthRequest, res: Response, next: NextFun
         data: { stock: { decrement: 1 } },
       });
       
-      await PointsService.redeemPoints(user.id, prize.pointsCost, newRedemption.id);
+      // Actualizar puntos del cliente - sin crear notificación ni historial complejo
+      // ya que la cajera está presente y no se necesita email/SMS
+      await tx.clientProfile.update({
+        where: { userId: user.id },
+        data: {
+          currentPoints: { decrement: prize.pointsCost },
+          totalPointsRedeemed: { increment: prize.pointsCost },
+        },
+      });
       
       return newRedemption;
     });
     
+    // Obtener perfil actualizado (ya fue modificado en la transacción)
     const updatedProfile = await prisma.clientProfile.findUnique({ where: { userId: user.id } });
     
-    if (user.email && await SystemConfigService.getNotificationsEnabled('email')) {
-      await emailService.sendRedemptionConfirmationEmail(user.email, user.firstName, prize.name, prize.pointsCost, updatedProfile!.currentPoints);
-    }
-    
     res.status(201).json({
-      redemption: { id: redemption.id, pointsSpent: redemption.pointsSpent, createdAt: redemption.createdAt },
+      redemption: { id: redemption.id, pointsSpent: redemption.pointsSpent, createdAt: redemption.createdAt, status: redemption.status },
       prize: { name: prize.name, pointsCost: prize.pointsCost },
       newBalance: updatedProfile!.currentPoints,
+      message: 'Canje completado exitosamente',
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const completeRedemption = async (req: AuthRequest, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const { redemptionId } = req.params;
+    
+    const redemption = await prisma.redemption.findUnique({ where: { id: redemptionId } });
+    if (!redemption) throw new AppError(404, 'Redención no encontrada');
+    
+    // Verificar que el usuario tenga permiso (cajera o admin de su sucursal)
+    const scope = resolveBranchScope(req.user);
+    if (scope.isGlobal || req.user.role === 'CAJERA') {
+      // Cajera puede completar cualquier redención de su sucursal
+    } else {
+      throw new AppError(403, 'No tiene permiso para completar esta redención');
+    }
+    
+    const updatedRedemption = await prisma.redemption.update({
+      where: { id: redemptionId },
+      data: { status: 'COMPLETADO', processedBy: req.user!.id, processedAt: new Date() },
+    });
+    
+    res.json({
+      redemption: { id: updatedRedemption.id, status: updatedRedemption.status, processedAt: updatedRedemption.processedAt },
+      message: 'Canje completado exitosamente',
     });
   } catch (error) {
     next(error);
@@ -301,7 +336,7 @@ export const redeemPrizeByClient = async (req: Request, res: Response, next: Nex
           userId: user.id,
           prizeId: prize.id,
           pointsSpent: prize.pointsCost,
-          status: 'COMPLETADO',
+          status: 'PENDIENTE',
           notes: 'Canje autogestionado por cliente',
         },
       });
@@ -323,9 +358,10 @@ export const redeemPrizeByClient = async (req: Request, res: Response, next: Nex
     }
     
     res.status(201).json({
-      redemption: { id: redemption.id, pointsSpent: redemption.pointsSpent, createdAt: redemption.createdAt },
+      redemption: { id: redemption.id, pointsSpent: redemption.pointsSpent, createdAt: redemption.createdAt, status: redemption.status },
       prize: { name: prize.name, pointsCost: prize.pointsCost },
       newBalance: updatedProfile!.currentPoints,
+      message: 'Pedido de canje registrado. Coordiná la retirada del premio en sucursal.',
     });
   } catch (error) {
     next(error);
